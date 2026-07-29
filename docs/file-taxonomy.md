@@ -1,0 +1,425 @@
+# context-mesh — file taxonomy
+
+Status: design note. Written 2026-06-25; reframed 2026-07-16; **restructured 2026-07-21 by the
+[single-Hub collapse](vocabulary.md#v20-2026-07-21--the-single-hub-collapse)**. This is the
+"where does any piece of context live" layout called for in the [README](../README.md).
+
+**Read the manifest split first** ([below](#the-manifest-split-what-varies-per-implementation)):
+the file *lists* here are a good default, not a specification. They are expected to be
+tweaked per implementation. The *structure* around them — the layers, the discovery-artifact
+shape, staging — is framework and does not vary.
+
+## Everything lives in the AI Hub
+
+**One repo holds all context.** Context about a specific thing lives in a **domain folder**
+inside the Hub — not in the code repo it describes. Code repos hold no context and are unaware
+of the mesh. All Hub content, domain-specific included, is readable by everyone.
+
+```
+hub/
+  product/            # cross-cutting, applies to everybody
+  technical/
+  process/
+  governance/
+  <domain>/           # everything about one domain
+    product/
+    technical/
+    process/workflows/
+    staging/
+  staging/            # cross-cutting undecided material
+```
+
+A **domain** is a namespace, not necessarily a code repository. It may map 1:1 to one repo, span
+several, or be finer than one. **Which domains exist is manifest** (per-engagement config);
+**that domains exist and own their context exclusively is framework**. See
+[vocabulary.md](vocabulary.md) `Domain`.
+
+## How to read this
+
+Every file sits on two axes, plus two attributes that decide its storage mechanics:
+
+- **Scope** — *Cross-cutting* (at the Hub root; governs everybody) vs. *Domain* (inside one
+  domain folder; about that thing). **This replaces the old central-vs-repo-local axis**, which
+  described *which repo a file sat in* back when there were many. The question is now "what is
+  this about," not "where does it live" — everything lives in the Hub.
+- **About** — Product / Feature / Technical / Process & Governance.
+- **State** — *Canonical* (decided fact) vs. *Staging* (undecided; awaits promotion).
+- **Cardinality** — *Singleton* (one-off; referenced by **path**) vs. *Multi-sibling*
+  (many instances of a type; referenced by **ID** — see [[id-vs-path-references]] /
+  CLAUDE.md). This is what determines whether a thing is a file or a folder-of-files.
+
+Two source models fed this draft, one per side of the cross-cutting/domain split:
+- A real engagement's canonical context list (a legacy-platform migration) — **generalized
+  here**, engagement specifics stripped. → the *cross-cutting, durable* side.
+- The aiviz/Crumbs product-discovery structure (OST, iterations, stories) — a working
+  instance of PM-owned, multi-sibling, ID'd artifacts. → the *domain, discovery* side.
+
+The design goal is **mutual exclusivity**: for any fact, exactly one obvious home.
+
+---
+
+## The manifest split: what varies per implementation
+
+The context-file list is **not a design decision to get right once**. It changes from
+project to project — a migration engagement, a greenfield product, and a platform team all
+want different central files. Deciding on a defensible starting set and tweaking it per
+implementation is the correct move; trying to find the one true list is not.
+
+So the taxonomy splits in two:
+
+| | What it is | Varies? |
+|---|---|---|
+| **Manifest** | The **file lists**: which Layer A cross-cutting files exist, and which Layer B per-domain singletons exist — their names, and what each is about. **Plus which domains exist.** | **Yes** — per implementation |
+| **Framework** | The **structure**: the layers and their semantics, the two axes, the discovery-artifact shape, staging, and the [vocabulary](vocabulary.md) | **No** — fixed |
+
+### What the manifest can vary
+
+- **Add** a file the framework never anticipated (`technical/legacy-runtime-topology.md` for a
+  migration engagement).
+- **Carve the domains** — one per code repo, one per business domain, or a mix. The framework
+  says domains exist and own their context; *which* ones is this client's call.
+- **Drop** a file this org has no use for (a team with no formal design practice drops
+  `product/design-principles.md`).
+- **Rename** to match house vocabulary (`technical/nfr.md` → `technical/slos.md`).
+- **Split or merge** where progressive disclosure demands it — e.g. splitting
+  `governance/data-handling.md` once a given org's content actually grows too broad.
+  Formerly an open question here; the manifest answers it per implementation.
+
+### What the manifest cannot vary
+
+- **The vocabulary** ([vocabulary.md](vocabulary.md), locked v2.0) — node types, edge types,
+  and the legal-edge matrix. This is the routing logic; ingestion validates against it.
+  A per-client type system means a per-client ingestion agent.
+- **The discovery-artifact shape** (Layer B, below) — `opportunity-solution-tree/` and
+  `iterations/`, the 4-digit IDs, the `Story → Solution → Opportunity → Outcome` parent
+  chain. This is not a file list; it is the **physical instantiation of the vocabulary's
+  discovery node types**. Making it configurable would decouple storage from the type
+  system and break the traceability chain the graph depends on.
+- **The layer semantics** — what "cross-cutting canonical" / "domain" / "staging" *mean*, and
+  the ownership and promotion rules that follow. See
+  [promotion-boundary.md](promotion-boundary.md).
+- **Staging mechanics** (Layer C) — the inbox → candidates → promotion flow.
+
+### Why the line falls there
+
+The manifest covers **singletons referenced by path**; the framework covers **everything
+the graph reasons over**. A path-referenced singleton is inert as far as the type system is
+concerned — the index/loader lists it, an agent loads it, nothing validates its name. Adding
+or renaming one costs nothing structurally. Multi-sibling ID'd artifacts are the opposite:
+their folders, IDs, and parent chains are what the edges traverse. Change those and the
+routing logic changes with them.
+
+The lists below are therefore the **default manifest** — a "pretty good" starting set,
+generalized from one real engagement's context list plus the aiviz discovery structure.
+Ship it, then tweak in place per client.
+
+---
+
+## Layer A — Cross-cutting canonical context (Hub root) — *manifest-driven*
+
+Shared by everybody, changes rarely. Lives at the **Hub root**, outside any domain folder.
+Mostly **singletons referenced by path**. These are the "5–7 foundational files to define
+before the conversations" from the seeding design work, generalized from a real engagement's
+context-file list. Each is one small file (split a section out into its own file only when it
+grows enough to hurt progressive disclosure).
+
+> **This list is the default manifest, not a specification.** Add, drop, rename, split, and
+> merge per implementation. The tables' "Generalized from" column records the kind of source
+> each default came from, so a new engagement can see what was generalized away and put its
+> own specifics back.
+
+### Product (cross-cutting)
+| File | About | Generalized from |
+|---|---|---|
+| `product/business-context.md` | Why this product/system exists; business problems solved; who depends on it; value delivered | "Business Context & Purpose" |
+| `product/personas.md` | Customer/stakeholder personas — a slug legend + one section each (aiviz pattern: one file, not one per persona) | — |
+| `product/design-principles.md` | Product values and how tradeoffs get resolved | aiviz `principles.md` |
+| `product/glossary.md` | Domain terms, shared vocabulary | aiviz `glossary.md` |
+
+### Technical (cross-cutting)
+| File | About | Generalized from |
+|---|---|---|
+| `technical/target-architecture.md` | Target-state architecture, structure, deployment, observability | "Target Architecture" |
+| `technical/integration-map.md` | Cross-system dependencies: APIs, data stores, queues, feeds, jobs | "Dependency & Integration Map" |
+| `technical/api-and-interface-standards.md` | How APIs and interfaces should look — conventions, contracts, patterns | (generalized) |
+| `technical/coding-standards.md` | Language/framework/style conventions, patterns, anti-patterns | "Coding Standards" |
+| `technical/testing-standards.md` | Test types, coverage thresholds, test-data, CI integration | "Testing Standards" |
+| `technical/nfr.md` | Non-functional requirements: performance, SLAs, throughput, scalability | "Non-Functional Requirements" |
+
+### Process & Governance (cross-cutting)
+| File | About | Generalized from |
+|---|---|---|
+| `process/ways-of-working.md` | End-to-end workflow, rituals, handoffs (ticket → … → deploy) | "Ways of Working Overview" |
+| `process/definition-of-done.md` | Shared "complete" criteria; acceptance-criteria pattern | "Definition of Done" + "AC Pattern" |
+| `process/review-and-release.md` | Review/approval model, environments, promotion path, rollback | "Review & Approval" + "Release & Environment Flow" |
+| `governance/data-handling.md` | Data classification, residency/sovereignty, encryption, network security | split from "Security, Data & Compliance" |
+| `governance/access-control.md` | AuthN/AuthZ, identity, RBAC, service accounts, SSO/MFA | split from "Security, Data & Compliance" |
+| `governance/compliance.md` | Regulatory framework, audit, logging, retention, incident response | split from "Security, Data & Compliance" |
+| `governance/ai-policy.md` | AI usage guidelines, AI-specific data rules, human-review triggers | "AI Usage Guidelines" + "AI-Specific Data Policies" |
+| `capabilities/skill-governance.md` | How skills/agents are proposed, tested, approved, versioned, retired; context-update policy | "Skill Lifecycle" + "Context Update Policy" |
+
+> **Why these and not the source list's several dozen sections:** the source list mixes the
+> durable taxonomy with one engagement's specifics (legacy runtime topology, target-platform
+> details, migration playbook, coexistence routing). Those are *domain-local technical context
+> for that migration*, not the central canonical list. The generalization keeps the durable
+> categories and pushes engagement specifics down to Layer B.
+
+---
+
+## Workflows — where a routable process lives (added 2026-07-16) — *framework, fixed*
+
+`Workflow` is a node type in [vocabulary.md](vocabulary.md) — "a triggerable process" — and
+until now this document **gave it nowhere to live**. That is a framework hole, not a manifest
+gap: the type system promised a destination the storage layer never provided.
+
+It surfaced through `Todo`, whose only useful edge is `routed-to → Workflow`. Ingestion run 1
+produced two action items and could place neither — **at high confidence**, because the agent
+knew exactly what it wanted and found nothing there. `Requirement → triggers → Workflow` has
+the same hole and simply hasn't been hit yet.
+
+### The rule
+
+A `Workflow` is **one file per process**, declared in the owning index:
+
+| Location | Scope | Examples |
+|---|---|---|
+| `process/workflows/` (Hub root) | Cross-team processes | `refinement.md`, `incident-response.md` |
+| `<domain>/process/workflows/` | This team's processes | `backlog.md`, `triage.md` |
+
+Both are allowed. **The index that lists it declares who owns it** — same rule as everything
+else on the two axes. A team with its own backlog declares one in its domain; a shared
+refinement process is declared at the root. Neither is privileged.
+
+Singletons, **path-referenced** (`payments/process/workflows/backlog.md`), not ID'd —
+there is no traceability chain among workflows and nothing traverses between them. They fall
+on the **manifest** side for *which processes exist* (per-implementation: some teams have a
+triage workflow, some don't) and the **framework** side for *the folder and the pointer
+shape*.
+
+### A `Workflow` may be a pointer to an external system — and usually is
+
+This is the part that matters. A `Workflow` file is **not** a mesh-native copy of the
+process. It **names the process and says where it actually lives**:
+
+```markdown
+---
+type: Workflow
+name: backlog
+system: jira
+external_ref: https://acme.atlassian.net/jira/software/projects/PAY
+---
+
+# payments-svc — backlog
+
+Where work for this team is queued. **The backlog itself lives in Jira** (`external_ref`);
+this file exists so the graph has a legal `routed-to` target and so an agent knows where to
+send an action item.
+
+Nothing here is a copy of Jira. A `Todo` routed here has been *identified and attributed*,
+not *filed* — filing is a human act in the real system.
+```
+
+**Why a pointer rather than a `backlog.md` list:** a markdown backlog in a repo is a shadow
+copy of the real tracker, and it rots the day it's written. This client has Jira; every client
+has something. The mesh's job is to **know where work goes**, not to be where work goes. A
+`Workflow` that points at Jira is honest about that; a `backlog.md` full of checkboxes is a
+second source of truth pretending otherwise.
+
+The pointer also keeps `derives-from` provenance intact — the `Todo` candidate records what
+was said, who said it, and which conversation it came from, then points at the tracker where
+it belongs. That is strictly better than both "shadow backlog in the mesh" and "go type it
+into Jira yourself, we kept no record."
+
+**A `Workflow` with no `external_ref` is legal** — a genuinely mesh-native process (a
+refinement ritual that is only a description) needs no external system. But a **backlog**
+with no `external_ref` is a smell: it means the mesh is about to become an issue tracker.
+
+---
+
+## Layer B — Domain context (in each domain folder)
+
+Specific to one domain — its codebase, its team. Lives at `<domain>/` **inside the Hub**, using
+the **same layout as the Hub root**, so a path means the same thing at either level.
+
+> **Changed 2026-07-21.** Layer B used to live in the code repo and be **mirrored to the Hub by
+> CI on merge to main**, with the leaf authoritative and the Hub copy read-only. There is no
+> mirror and no second copy: the file a developer edits **is** the canonical file. Code repos
+> hold no context. See the [single-Hub collapse](vocabulary.md#v20-2026-07-21--the-single-hub-collapse).
+
+**Layer B straddles the manifest split** — its two halves fall on opposite sides:
+the per-domain singleton list is manifest, the discovery-artifact structure is framework.
+
+### Per-domain canonical (singletons, path-referenced) — *manifest-driven*
+
+Same rules as Layer A: this list is a default. Add, drop, or rename per implementation.
+
+| File | About |
+|---|---|
+| `technical/repo-overview.md` | What this domain is and does; its place in the system |
+| `technical/system-behavior.md` | What this service does technically: flows, transactions, orchestration |
+| `technical/runtime-architecture.md` | This domain's runtime topology (engagement-specific architecture lands here, not at the root) |
+| `technical/legacy-notes.md` | Undocumented behaviors, quirks, tribal knowledge |
+| `technical/local-conventions.md` | Domain-specific deviations from the cross-cutting standards |
+
+### PM-owned discovery artifacts (multi-sibling → **ID'd**, the aiviz model) — *framework, fixed*
+
+These are the product-management working artifacts. They are multi-instance, tracked,
+and cross-referenced — so they get **IDs**, not path-only references. They live in the owning
+**domain folder** (PMs own their own OSTs, discovery, stories), not at the Hub root.
+
+> **Not manifest-configurable.** Unlike the file lists above, this structure is fixed. The
+> folders, ID formats, and parent chain are the physical instantiation of the vocabulary's
+> discovery node types (`Outcome`, `Opportunity`, `Solution`, `Assumption`, `Story`, `Epic`,
+> `Interview`) and the `parent-of` edge — they are what the graph traverses, not inert files
+> the loader happens to list. An implementation that doesn't do continuous discovery simply
+> leaves these folders empty; it does not redefine them.
+
+> **No `context/` layer.** These hang directly off `product/`
+> (`product/opportunity-solution-tree/`, `product/iterations/`), not under an intermediate
+> `product/context/` (the aiviz path is dropped). This keeps the domain layout identical to the
+> Hub root's: every path is `product/<thing>` and means the same thing at either level. The
+> cross-iteration-vs-iteration distinction `context/` used to mark is already carried by the
+> folder names (`opportunity-solution-tree/` is the cross-iteration state; `iterations/` is the
+> per-cycle work).
+>
+> **Shared `product/` namespace.** Cross-cutting singletons (`product/personas.md`) and
+> per-domain discovery artifacts share the `product/` namespace. Whether a given `product/…`
+> file is cross-cutting or domain-scoped is answered by **whether it sits at the root or inside
+> a domain folder** — not by the path shape. Domain-prefixing keeps IDs globally unique
+> (`payments:OPP-0001`).
+
+Product-level (spans iterations), under `product/opportunity-solution-tree/`:
+
+All non-singleton artifact IDs are **4-digit, zero-padded** (`0001`–`9999`) to support
+very large, long-lived projects without exhausting the number space. (aiviz uses 2–3
+digits; context-mesh standardizes on 4 across every multi-sibling type for headroom and
+consistency.) Combined with the domain prefix, a full ID is e.g. `payments:OPP-0042`.
+
+| Artifact | Folder | ID format |
+|---|---|---|
+| Outcome | `outcomes/outcome-NNNN-slug.md` | `OUTCOME-NNNN` |
+| Opportunity | `opportunities/opportunity-NNNN-slug.md` | `OPP-NNNN` (frontmatter: `Parent Outcome`) |
+| Solution | `solutions/solution-NNNN-slug.md` | `SOL-NNNN` (frontmatter: `Parent Opportunity`) |
+| Assumption test | `assumptions/assumption-NNNN-slug.md` | `ASSUMPTION-NNNN` (frontmatter: `Parent Solution`) |
+
+Iteration-scoped, under `product/iterations/{YYYY-MM-DD-slug}/`:
+
+| Artifact | Location | Notes |
+|---|---|---|
+| Interview | `interviews/{persona}-NNNN-name.md` | feeds synthesis |
+| Synthesis | `synthesis.md` | singleton per iteration |
+| Story | `stories/story-NNNN-slug.md` | `STORY-NNNN`; links `Opportunity`/`Solution`/`Epic` |
+| Epic | `epics/epic-NNNN-slug.md` | `EPIC-NNNN`; only when story count trips the threshold |
+| Story map | `story-maps/story-map-vN.md` | activity × release-slice grid |
+| Decisions log | `decisions.md` | append-only |
+
+Traceability chain (all via ID frontmatter): `Story → Solution → Opportunity → Outcome`,
+and within an iteration `Story → Epic`. This is the typed-edge graph from
+[knowledge-graph-model.md](knowledge-graph-model.md), instantiated.
+
+---
+
+## Layer C — Staging (undecided material, at the root and per-domain) — *framework, fixed*
+
+Where conversation ingestion drops things that are **not yet decided** — speculation,
+feature requests, ideation, unrouted facts — separate from canonical context, awaiting a
+human **promote** decision. aiviz already runs a working instance of this: the OST
+`inbox/` holds candidate opportunities from discovery until a PM promotes them into the
+tree (`promote-from-inbox`).
+
+| File / folder | Purpose |
+|---|---|
+| `staging/inbox/{YYYY-MM-DD}-{source}.md` | Distilled chunks from a conversation, pre-routing |
+| `staging/candidates/` | Proposed nodes/edges awaiting human validation (the OST-`inbox` generalization) |
+| `staging/open-questions.md` | Unresolved decisions surfaced but not yet answered |
+
+Staging mirrors the canonical structure: a candidate destined for `product/` waits in
+staging tagged for `product/`.
+
+**Promotion is a merge, not a move** (corrected 2026-07-16, on building
+`skills/promote-candidate/` against ten real candidates). The candidate's claim lands *in a
+section of an existing document*; the candidate itself **stays in staging**, marked
+`state: canonical`, as the audit trail carrying `derives-from` back to the conversation. The
+context file states the fact; the candidate records how we know it. Nothing is deleted, and
+nothing literally moves.
+
+Nor is promotion one verb — a `Todo` is handed over to the tracker its `Workflow` names
+(`state: resolved`), an `OpenQuestion` resolves into another type before it can promote at
+all, and a candidate contradicting its target stops for a human. See
+[ingestion-pipeline.md](ingestion-pipeline.md#separate-step--promotion-built-2026-07-16-skillspromote-candidate).
+
+---
+
+## Cross-cutting: the index / loader
+
+The Hub carries one **index/loader** file at its root, and one per domain folder, listing every
+context file and **when to load it** — the progressive-disclosure contract. This is what
+makes path references navigable without IDs. Suggested: `context-index.md` (or whatever
+the harness reads). It is the only file an agent must read first.
+
+**The index is where the manifest lands.** The manifest says which singletons this
+implementation has; the index lists them with their load conditions. Any tool that
+scaffolds a mesh reads the manifest and writes the index — which is why varying the file
+lists costs nothing structurally: the index absorbs the variance, and every consumer reads
+the index rather than assuming a file list.
+
+**The index *is* the manifest** (settled 2026-07-16, see [build-scope.md](build-scope.md)).
+There is no separate config file: one authored index declares the file list, feeds
+the ingestion agent's routing, and states the load conditions. A second authored copy would
+only drift.
+
+The **root index additionally declares which domains exist** — the one piece of mesh-wide
+manifest that is not a file list.
+
+---
+
+## Resolved (2026-07-16)
+
+- **The context-file list is per-implementation config, not a design decision.** File lists
+  (Layer A; Layer B singletons) are a **manifest**; structure (vocabulary, discovery shape,
+  layers, staging) is **framework**. See [the manifest split](#the-manifest-split-what-varies-per-implementation)
+  above. This retires "lock the foundational file list" as a blocker — ship a good default,
+  tweak in place per client.
+- **Is `governance/data-handling.md` too broad to split further?** Dissolved by the
+  manifest: splitting is a per-implementation call, made when a given org's data-handling
+  content actually grows enough to hurt progressive disclosure. No global answer needed.
+- **Manifest form — the index/loader IS the manifest.** One authored file per repo, serving
+  three roles at once: the manifest (what files this implementation has), the ingestion
+  agent's routing input, and the progressive-disclosure contract. No separate
+  `mesh-manifest.yml` — it would be a second copy of the same list, and two *authored* copies
+  drift. Settled while scoping the build — see [build-scope.md](build-scope.md).
+
+## Resolved (2026-07-21) — the single-Hub collapse
+
+- **Where domain-specific context lives: the Hub, in a domain folder.** Not in the code repo it
+  describes. Code repos hold no context and are unaware of the mesh. This replaced the
+  central-vs-repo-local axis with a cross-cutting-vs-domain one — a question about *what
+  context is about*, not *which repo it sits in*.
+- **Which domains exist is manifest**, alongside the file lists; *that* domains exist and own
+  their context exclusively is framework.
+- **Dissolved with the collapse:** the CI mirror (Layer B is authored where it lives, not
+  copied), leaf→Hub promotion of discovery artifacts, the partitioned/uniform access model, the
+  promotion allow-list, and the mono-vs-multi-repo question (there is one repo).
+
+## Resolved (2026-06-25)
+
+- **Security/compliance file split** into `governance/data-handling.md`,
+  `governance/access-control.md`, `governance/compliance.md` for progressive disclosure
+  (reflected in Layer A above).
+- **Per-feature requirements** are covered by the Opportunity → Solution → Story chain —
+  a "feature" is a Solution (or an Epic grouping Stories); its requirements are the Story
+  acceptance criteria. No separate per-feature file (would duplicate and break mutual
+  exclusivity).
+- **Visual-board sidecars** — optional `rendered-on` attachments to their parent node;
+  never canonical. See [board-sidecars.md](board-sidecars.md).
+
+## Still open
+
+- **How domain ownership is declared.** Repo boundaries used to make "authored in exactly one
+  place" structurally true; in one Hub it is true by construction, but *which team owns which
+  domain* is now a declaration (`owned-by`, CODEOWNERS) rather than a filesystem fact. See
+  [promotion-boundary.md](promotion-boundary.md).
+
+(**Resolved by the collapse, formerly open here:** the seeding client's access model, and where
+the promotion allow-list lives — there is no allow-list. The staleness gate and its "material
+change" question were already dissolved.)
