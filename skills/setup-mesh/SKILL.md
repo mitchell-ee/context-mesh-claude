@@ -78,6 +78,18 @@ This is deliberate ([build-scope.md](../../docs/build-scope.md) decision 4). Two
 If a domain genuinely needs its context files written, that's an authoring job for the people
 who know the answers. Setup can tell you *which are missing*. It cannot know what they say.
 
+> **This is a rule about *this skill*, not a ban on generated context.** The reason setup
+> doesn't author is that **it has no source to author from** — no interview, no transcript,
+> nothing but a directory listing. A tool that *does* have a source (a PM answering an
+> interview, an ingested conversation) may absolutely write context files. The invariant both
+> cases share is narrower and is the real rule:
+>
+> **Never index a file that says nothing.** A file its source did not populate should be
+> neither created nor listed. An absent file is an honest gap; an empty listed one is a lie.
+>
+> So a setup flow that pairs this skill with an authoring tool is correct and expected —
+> the authoring tool writes what it learned, this skill declares the structure around it.
+
 **It does not configure transcript sources.** Where transcripts come from varies per person
 and per transcript — one company runs Granola and Otter and Zoom at once. That's not
 setup config, and a saved default would be a hint the skill has to second-guess. Ingestion infers
@@ -132,12 +144,28 @@ names it and says where. A `Todo` routed here is **identified and attributed, no
 filing is a human act in the real system. See
 [file-taxonomy.md](../../docs/file-taxonomy.md#workflows--where-a-routable-process-lives-added-2026-07-16).
 
-**Never write a list of to-dos into the mesh.** That makes it a shadow issue tracker with a
-second source of truth, rotting from the day it's written. If someone asks for that, the
-answer is no — the mesh's job is to know *where* work goes, not to *be* where work goes.
+**Never create a second source of truth for work.** A list in the mesh that duplicates a queue
+some other system already owns rots from the day it's written. The mesh's job is to know
+*where* work goes, not to *be* where work goes.
 
-**If the team genuinely has no tracker**, a workflow with no `external_ref` is legal but it is
-a smell: it means the mesh is about to become one. Say so, and ask again.
+**The queue may be a file in this repo** (revised 2026-07-30, vocabulary v2.1). `system: repo`
+with an `external_ref` naming a repo-relative path is a first-class, correct workflow — a
+repo-native backlog that *is* the record of work duplicates nothing. Earlier versions of this
+skill blocked any checkbox list on sight; that test was wrong in both directions, blocking
+legitimate in-repo queues while passing a real shadow copy written without checkboxes.
+
+What is actually checked:
+
+| Condition | Verdict |
+|---|---|
+| No `system:` **and** no `external_ref:` | **BLOCKED** — nothing owns this queue |
+| `external_ref` naming a path that **doesn't exist** | **BLOCKED** — points at nothing |
+| `system: repo` + a path that resolves | **Fine** — checkbox list or not |
+| `system:` but no `external_ref` | **Note** — legal for a ritual, incomplete for a queue |
+
+**Say what the queue creates.** Add `creates: Story` or `creates: Task` so a routed `Todo`
+becomes the right kind of artifact rather than an untyped line. A dev backlog and a
+project-task list are different queues and a mesh may hold both.
 
 ### Other workflows
 
@@ -168,7 +196,8 @@ asking would couple the mesh to a vendor.
 Exit 0 = ingestion can run. Exit 1 = it can't, or would misroute.
 
 **Blocked** means genuinely broken: no index, or the index lists files that don't exist
-(facts would route into a vacuum), or a workflow that's a checkbox list rather than a pointer.
+(facts would route into a vacuum), or a workflow that declares no owning system, or one whose
+`external_ref` points at a path that doesn't exist.
 
 **A missing workflow is a note, not a blocker** — `Knowledge` and `DomainFact` route fine
 without one; only `Todo`s can't. That's a real consequence worth stating, but it isn't

@@ -3,6 +3,8 @@ type: Workflow
 name: backlog                 # backlog | triage | refinement | …
 system: jira                  # jira | linear | github | …  (omit only if truly mesh-native)
 external_ref: https://<org>.atlassian.net/jira/software/projects/<KEY>
+creates: Story                # Story | Task | omit — what work becomes when it lands here
+via: ee-pm:story-management   # optional, non-normative: how creation actually happens
 owned-by: <team>            # the authoring owner is a team (vocabulary v2.0), not a domain
 ---
 
@@ -15,6 +17,11 @@ and must never become one. It exists so that:
 
 - the graph has a legal `routed-to` target for a `Todo`, and
 - an agent that finds an action item knows where it belongs.
+
+**`creates` is what distinguishes one queue from another.** A mesh normally has several
+workflows; a `Todo` routed to a `creates: Story` workflow is destined for a real story, and
+one routed to `creates: Task` is non-dev work with no `Solution` above it. Set it whenever
+the answer is known — without it, routing can say *where* but not *what*.
 
 ## What routing here means
 

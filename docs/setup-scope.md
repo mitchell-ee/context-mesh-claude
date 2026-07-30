@@ -47,6 +47,18 @@ index.**
 - `business-context.md` existing and saying nothing **is** the lie, because routing reads the
   index and would confidently land a fact in a stub.
 
+**Scoping this correctly (clarified 2026-07-30).** The rule above is about *setup*, and the
+reason is that setup **has no source to author from** — it sees a directory listing, nothing
+more. It is not a ban on generated context in general. A tool with a real source — a PM
+answering a structured interview, an ingested conversation — may write context files, and
+should. The invariant that actually generalizes is narrower:
+
+> **Never index a file that says nothing.**
+
+An authoring tool honors it by not emitting stubs for sections its source didn't cover, and by
+registering what it *did* populate. Setup honors it by declaring structure and leaving content
+alone. Pairing the two is the expected shape, not a conflict.
+
 The distinction was always between *a container* and *a claim*. Only the claim was ever
 forbidden.
 

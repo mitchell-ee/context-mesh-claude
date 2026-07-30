@@ -33,9 +33,9 @@ def find_listed_files(index_text):
 
     A `../`-prefixed link used to be skipped wholesale as "cross-repo, not ours to verify".
     With all context in one Hub that is too broad: a domain index linking
-    `../product/personas.md` at the cross-cutting root is an ordinary reference inside the
-    same repo, and it is checkable. Skipping it would be a fail-open hole of exactly the kind
-    this project keeps finding.
+    `../product/personas/repeat-buyer.md` at the cross-cutting root is an ordinary reference
+    inside the same repo, and it is checkable. Skipping it would be a fail-open hole of exactly
+    the kind this project keeps finding.
 
     What still cannot be checked is a link that climbs *past* the root -- documentation
     outside the mesh entirely. The caller resolves against the root and knows where that is,
@@ -85,18 +85,41 @@ def find_workflow_files(repo_root):
     return sorted(f for f in os.listdir(d) if f.endswith(".md"))
 
 
-def workflow_is_pointer(path):
-    """A workflow should name the system that really runs the process. Returns
-    (has_external_ref, has_checkbox_list) -- the second is the shadow-tracker smell."""
+def workflow_ownership(path, repo):
+    """Does this workflow declare who owns its queue, and does that pointer resolve?
+
+    Returns (system, external_ref, dangling) where `dangling` is True only when
+    external_ref names a repo-relative path that does not exist.
+
+    Deliberately does NOT look for checkbox characters. Through v2.0 it did, and that
+    test was wrong in both directions: it blocked a repo-native backlog that is
+    legitimately the single record of work, and it would pass a genuine shadow copy
+    written without checkboxes. The hazard is a SECOND SOURCE OF TRUTH -- a queue some
+    other system already owns -- so the thing to check is whether an owner is declared
+    and whether the pointer resolves. (vocabulary.md v2.1)
+    """
     try:
         with open(path) as fh:
             text = fh.read()
     except OSError:
-        return False, False
-    has_ref = bool(re.search(r"^external_ref:\s*\S+", text, re.M))
-    # A workflow file accumulating "- [ ] do the thing" is the mesh becoming a tracker.
-    has_list = bool(re.search(r"^\s*[-*]\s*\[[ x]\]", text, re.M))
-    return has_ref, has_list
+        return None, None, False
+
+    m_sys = re.search(r"^system:\s*(\S+)", text, re.M)
+    m_ref = re.search(r"^external_ref:\s*(\S+)", text, re.M)
+    system = m_sys.group(1).strip() if m_sys else None
+    ref = m_ref.group(1).strip() if m_ref else None
+
+    # `null`/`none` is an absent ref written out longhand, not a pointer.
+    if ref and ref.lower() in ("null", "none", "~"):
+        ref = None
+
+    dangling = False
+    if ref and not re.match(r"^[a-z][a-z0-9+.-]*://", ref):
+        # Not a URL -- treat as a repo-relative path, which must actually exist.
+        # A dangling path is a real failure: it points at nothing.
+        dangling = not os.path.exists(os.path.join(repo, ref))
+
+    return system, ref, dangling
 
 
 def main():
@@ -143,7 +166,8 @@ def main():
     # disclosure -- demanding a link per artifact would invert it, and would mean re-editing
     # the index on every new opportunity.
     listed_set = set(listed)
-    ost_ids = set(re.findall(r"\b(OUTCOME|OPP|SOL|ASSUMPTION|STORY|EPIC)-(\d{4})\b", index_text))
+    ost_ids = set(re.findall(
+        r"\b(OUTCOME|OPP|SOL|ASSUMPTION|STORY|EPIC|TASK)-(\d{4})\b", index_text))
 
     for sub in ("technical", "product", "process"):
         d = os.path.join(repo, sub)
@@ -161,11 +185,13 @@ def main():
                     continue
 
                 # An ID'd discovery artifact is declared by its ID, not a link.
-                m = re.search(r"(outcome|opportunity|solution|assumption|story|epic)-(\d{4})",
-                              os.path.basename(rel))
+                m = re.search(
+                    r"(outcome|opportunity|solution|assumption|story|epic|task)-(\d{4})",
+                    os.path.basename(rel))
                 if m:
                     prefix = {"outcome": "OUTCOME", "opportunity": "OPP", "solution": "SOL",
-                              "assumption": "ASSUMPTION", "story": "STORY", "epic": "EPIC"}
+                              "assumption": "ASSUMPTION", "story": "STORY", "epic": "EPIC",
+                              "task": "TASK"}
                     if (prefix[m.group(1)], m.group(2)) in ost_ids:
                         continue  # declared by ID in the index tree. Correct.
                     notes.append(
@@ -201,16 +227,24 @@ def main():
                 f"invisible, so Todos still cannot route.")
         for f in wf_files:
             full = os.path.join(repo, "process", "workflows", f)
-            has_ref, has_list = workflow_is_pointer(full)
-            if not has_ref:
-                notes.append(
-                    f"`process/workflows/{f}` has no `external_ref`. Legal, but a backlog "
-                    f"with no external system is a smell: the mesh is about to become one.")
-            if has_list:
+            system, ref, dangling = workflow_ownership(full, repo)
+            if not system and not ref:
                 problems.append(
-                    f"`process/workflows/{f}` contains a checkbox list. A workflow is a "
-                    f"POINTER to the real tracker, not a container. This is the mesh turning "
-                    f"into a shadow issue tracker with a second source of truth.")
+                    f"`process/workflows/{f}` declares no owning system: it has neither "
+                    f"`system:` nor `external_ref:`. Nothing owns this queue, so a Todo "
+                    f"routed here lands in a list that is a second source of truth for work "
+                    f"tracked elsewhere. Name the system (`jira`, `linear`, or `repo`) and "
+                    f"where it is.")
+            elif dangling:
+                problems.append(
+                    f"`process/workflows/{f}` points at `{ref}`, which does not exist. A "
+                    f"workflow is a pointer; one that resolves to nothing sends action items "
+                    f"nowhere.")
+            elif not ref:
+                notes.append(
+                    f"`process/workflows/{f}` names `system: {system}` but has no "
+                    f"`external_ref`. Legal for a genuinely mesh-native process (a ritual "
+                    f"that is only a description). For a queue, add where it actually is.")
 
     if quiet:
         return 1 if problems else 0

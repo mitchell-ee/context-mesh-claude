@@ -119,24 +119,28 @@ def survey_one(repo, hub=False, hub_root=None):
         else:
             notes.append("No workflow declared -- Knowledge and facts route fine, "
                          "**Todos cannot**.")
-            # NOT scaffoldable. A workflow file needs `system` + `external_ref` pointing
-            # at the real tracker -- a fact about the team, not a container. Scaffolding
-            # an empty one would create exactly the smell check_setup warns about: a
-            # workflow with no external system, i.e. the mesh becoming the tracker.
-            asks.append("where this team queues work (Jira/Linear/...)")
+            # NOT scaffoldable. A workflow file needs `system` + `external_ref` naming
+            # where work really goes -- a fact about the team, not a container. Scaffolding
+            # an empty one would create exactly what check_setup blocks: a workflow with
+            # no declared owner, i.e. a queue that is a second source of truth.
+            asks.append("where this team queues work (Jira/Linear/a file in this repo/...)")
     else:
         if not wf_declared:
             problems.append("Workflow file(s) exist but the index has no Workflows section "
                             "-- routing cannot see them, so Todos still cannot route.")
         for f in wf_files:
             full = os.path.join(repo, "process", "workflows", f)
-            has_ref, has_list = check_setup.workflow_is_pointer(full)
-            if not has_ref:
-                notes.append(f"`process/workflows/{f}` has no `external_ref` -- legal, "
-                             f"but the mesh is about to become a tracker.")
-            if has_list:
-                problems.append(f"`process/workflows/{f}` contains a checkbox list -- "
-                                f"a workflow is a pointer, not a container.")
+            system, ref, dangling = check_setup.workflow_ownership(full, repo)
+            if not system and not ref:
+                problems.append(f"`process/workflows/{f}` declares no owning system "
+                                f"(no `system:`, no `external_ref:`) -- nothing owns this "
+                                f"queue.")
+            elif dangling:
+                problems.append(f"`process/workflows/{f}` points at `{ref}`, which does "
+                                f"not exist -- it sends action items nowhere.")
+            elif not ref:
+                notes.append(f"`process/workflows/{f}` has `system: {system}` but no "
+                             f"`external_ref` -- legal for a ritual, incomplete for a queue.")
 
     # Containers scaffolding would create. Absent ones are not problems -- they are
     # exactly what `scaffold_domain.py` fixes without a human.

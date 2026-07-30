@@ -26,13 +26,15 @@ LEGAL_EDGES = {
     "Todo": {"derives-from", "routed-to", "references"},
     "DomainFact": {"derives-from", "applies-to", "references", "contradicts"},
     "OpenQuestion": {"derives-from", "references"},
-    # Group B -- discovery artifacts
+    # Group B -- discovery & work artifacts
     "Outcome": {"parent-of", "rendered-on"},
     "Opportunity": {"parent-of", "references", "rendered-on"},
     "Solution": {"parent-of", "references", "rendered-on"},
     "Assumption": {"references", "rendered-on"},
     "Story": {"parent-of", "references", "rendered-on"},
     "Epic": {"parent-of", "rendered-on"},
+    # v2.1: work with no discovery lineage. No parent-of -- that absence IS the type.
+    "Task": {"references", "routed-to", "rendered-on"},
     "Interview": {"references"},
     # Group C -- canonical context & structural
     "ContextFile": {"applies-to", "references", "loaded-by", "owned-by"},
@@ -57,7 +59,9 @@ VALID_TAGS = {"decided", "undecided"}
 VALID_SOURCE_KINDS = {"referenced", "archived", "ephemeral"}
 
 # 4-digit zero-padded, domain-prefixed: payments:OPP-0042 (file-taxonomy.md)
-ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*:(OUTCOME|OPP|SOL|ASSUMPTION|STORY|EPIC)-\d{4}$")
+ID_PATTERN = re.compile(
+    r"^[a-z0-9][a-z0-9-]*:(OUTCOME|OPP|SOL|ASSUMPTION|STORY|EPIC|TASK)-\d{4}$"
+)
 
 
 class Violation:

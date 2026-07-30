@@ -50,15 +50,17 @@ import sys
 # It is strict about the ONE thing the mesh does own: this is not a filesystem path.
 BOARD_REF = re.compile(r"^[a-z][a-z0-9-]*:(?:board:)?[A-Za-z0-9_=-]+$")
 
-# `<domain>:TYPE-NNNN` -- a domain-prefixed discovery artifact ID.
+# `<domain>:TYPE-NNNN` -- a domain-prefixed discovery or work artifact ID.
+# TASK added v2.1: omitting it would make every Task reference silently unvalidated --
+# the fail-open shape this project keeps rediscovering.
 ARTIFACT_ID = re.compile(
-    r"^([a-z0-9][a-z0-9-]*):(OUTCOME|OPP|SOL|ASSUMPTION|STORY|EPIC)-(\d{4})$")
+    r"^([a-z0-9][a-z0-9-]*):(OUTCOME|OPP|SOL|ASSUMPTION|STORY|EPIC|TASK)-(\d{4})$")
 
 # A bare node ID as written in staging: `conv-0001`, `rf-0003`, `oq-0002`, `todo-0001`.
 NODE_ID = re.compile(r"^[a-z]+-\d{4}$")
 
 # An artifact ID with no domain prefix: `OUTCOME-0001`. Resolves in the declaring domain.
-BARE_ARTIFACT_ID = re.compile(r"^(OUTCOME|OPP|SOL|ASSUMPTION|STORY|EPIC)-(\d{4})$")
+BARE_ARTIFACT_ID = re.compile(r"^(OUTCOME|OPP|SOL|ASSUMPTION|STORY|EPIC|TASK)-(\d{4})$")
 
 FRONTMATTER = re.compile(r"\A---\n(.*?)\n---", re.S)
 
@@ -83,6 +85,15 @@ PARENT_KEY = re.compile(
 # -- the same fail-open shape as the `parent-of` chain being invisible. `null` is legal and
 # meaningful (the "no home in this mesh" finding), so it is skipped rather than flagged.
 TARGET_KEY = re.compile(r"^target:\s*(\S+)\s*$", re.M)
+
+# A `Workflow`'s `external_ref` -- where the process it points at actually runs. Usually a URL
+# (`system: jira`), which the mesh must not try to resolve. But a repo-native queue
+# (`system: repo`, e.g. ee-pm's `product/backlog.md`) names a real path, and THAT is the case
+# worth checking: it is the one form of `external_ref` that can rot silently against the
+# filesystem. Found fail-open on 2026-07-30 -- a workflow pointing at a directory that did not
+# exist passed, because the walker read `edges:`, `parent-*:` and `target:` and nothing else.
+# Same shape as the four before it: the check reported success while looking at nothing.
+EXTERNAL_REF_KEY = re.compile(r"^external_ref:\s*(\S+)\s*$", re.M)
 
 
 def parse_edges(text):
@@ -115,6 +126,10 @@ def parse_edges(text):
         dest = tm.group(1).strip().strip("'\"")
         if dest.lower() not in ("null", "~", "none"):
             out.append(("target", dest))
+
+    em = EXTERNAL_REF_KEY.search(fm)
+    if em:
+        out.append(("external-ref", em.group(1).strip().strip("'\"")))
 
     for pm in PARENT_KEY.finditer(fm):
         # Reported as `parent-of` so a broken traceability link reads in the vocabulary's
@@ -212,6 +227,27 @@ def resolve(edge, target, domain_name, hub_root, domains, node_ids, artifact_ids
         return ("unknown", False,
                 f"`{edge}` points at what looks like a board reference (`{target}`). Only "
                 f"`rendered-on` may target a Board.")
+
+    # A Workflow's `external_ref`. Two things make it unlike every other reference here, and
+    # both are why it gets its own branch rather than falling through to the path check:
+    # it is DOMAIN-relative (it names where the process runs inside its own domain), and it
+    # may legitimately name a DIRECTORY (`product/tasks/`) rather than a file.
+    if edge == "external-ref":
+        # A URL contains `/`, so `looks_like_path` alone would misread `https://...` as a
+        # file and report every Jira-backed workflow as broken. Scheme test first.
+        if "://" in target or not looks_like_path(target):
+            # A URL, a Jira key, anything off-filesystem. Not ours to resolve -- same
+            # reasoning as a board ID.
+            return ("external-ref", True, "off-filesystem (not checked -- by design)")
+        base = os.path.join(hub_root, domain_name) if domain_name else hub_root
+        full = os.path.join(base, target)
+        if os.path.exists(full):
+            return ("external-ref", True, "")
+        where = domain_name or "the Hub root"
+        return ("external-ref", False,
+                f"`{target}` does not exist in {where} ({full}). A repo-native workflow's "
+                f"`external_ref` names the queue it points at; if that path is wrong the "
+                f"mesh routes work to nowhere.")
 
     if ARTIFACT_ID.match(target):
         if target in artifact_ids:
@@ -336,6 +372,14 @@ def main():
     if boards:
         print(f"{len(boards)} board reference(s) accepted as off-filesystem -- a `rendered-on`")
         print("target is a view in Miro/Claude Design, not a file. Not a dangling link.")
+        print()
+
+    offsite = [r for r in rows
+               if r["ok"] and r["kind"] == "external-ref" and r["detail"]]
+    if offsite:
+        print(f"{len(offsite)} workflow `external_ref`(s) point off-filesystem (a URL or")
+        print("tracker key) and were NOT resolved -- checking them would mean reaching out")
+        print("to a vendor. Only repo-native refs (`system: repo`) are checked on disk.")
         print()
 
     if not bad:

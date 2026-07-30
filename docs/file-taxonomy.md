@@ -2,7 +2,7 @@
 
 Status: design note. Written 2026-06-25; reframed 2026-07-16; **restructured 2026-07-21 by the
 [single-Hub collapse](vocabulary.md#v20-2026-07-21--the-single-hub-collapse)**. This is the
-"where does any piece of context live" layout called for in the [README](../README.md).
+"where does any piece of context live" layout called for in [the README](../README.md).
 
 **Read the manifest split first** ([below](#the-manifest-split-what-varies-per-implementation)):
 the file *lists* here are a good default, not a specification. They are expected to be
@@ -127,14 +127,41 @@ grows enough to hurt progressive disclosure).
 > merge per implementation. The tables' "Generalized from" column records the kind of source
 > each default came from, so a new engagement can see what was generalized away and put its
 > own specifics back.
+>
+> **Every row below is optional** (clarified 2026-07-30). Not "optional in principle, expected
+> in practice" — genuinely optional. Nothing validates that any of these exist:
+> `check_setup.py` deliberately does not check for manifest files, because *a repo missing
+> `design-principles.md` isn't broken; it's a repo without design principles.* A team that
+> keeps four files and a team that keeps twenty are both correctly configured.
+>
+> **Read this list as a vocabulary of homes, not a checklist.** Its job is to answer "if we
+> *do* have this kind of context, where does it go?" so that two teams who both have personas
+> put them in the same place. It is not a claim about which kinds a team ought to have. Any
+> real practice's list will look substantially different from this one — these defaults were
+> generalized from **one** engagement plus the [ee-pm](https://github.com/mitchell-ee/ee-pm)
+> discovery practice, and both are particular.
 
 ### Product (cross-cutting)
 | File | About | Generalized from |
 |---|---|---|
 | `product/business-context.md` | Why this product/system exists; business problems solved; who depends on it; value delivered | "Business Context & Purpose" |
-| `product/personas.md` | Customer/stakeholder personas — a slug legend + one section each (aiviz pattern: one file, not one per persona) | — |
-| `product/design-principles.md` | Product values and how tradeoffs get resolved | aiviz `principles.md` |
+| `product/personas/{slug}.md` | Customer/stakeholder personas — **one file each**, keyed by `slug`. See [Personas](#personas--one-file-each-keyed-by-slug) below: this is the one Layer-A entry that is *framework*, not manifest. | — |
+| `product/design-principles.md` | Product values and how tradeoffs get resolved | aiviz `principles.md`, ee-pm `principles.md` |
 | `product/glossary.md` | Domain terms, shared vocabulary | aiviz `glossary.md` |
+| `product/product-strategy.md` | Where the product is going: direction, bets, what it will and won't become | ee-pm |
+| `product/product-as-built.md` | What the product actually does **today** — existing behavior and constraints, from the user's view. *Product*, not technical: `technical/system-behavior.md` covers runtime behavior per domain. | ee-pm |
+
+**Practice-dependent product context.** These exist only if a team runs a discovery practice
+that produces them. Listed so that a team who *has* them has a declared home — not as a gap
+for a team who doesn't.
+
+| File | About | Generalized from |
+|---|---|---|
+| `product/screens/{slug}.md` | Baseline specs for screens the product already has — what exists today, used to ground a new design against it rather than redesigning around it | ee-pm `claude-design` |
+| `product/journey-maps/{slug}.md` | Key user workflows: critical moments, friction points. One file per journey — same progressive-disclosure reasoning as personas | ee-pm `framework-setup` |
+| `product/competitive-analysis.md` | Competitors and alternatives; what they do well; market gaps | ee-pm `framework-setup` |
+| `product/use-cases.md` | Primary scenarios, edge cases that must be handled, what's explicitly out of scope | ee-pm `framework-setup` |
+| `product/constraints.md` | Technical, business, and regulatory constraints the product operates under | ee-pm `framework-setup` |
 
 ### Technical (cross-cutting)
 | File | About | Generalized from |
@@ -163,6 +190,51 @@ grows enough to hurt progressive disclosure).
 > details, migration playbook, coexistence routing). Those are *domain-local technical context
 > for that migration*, not the central canonical list. The generalization keeps the durable
 > categories and pushes engagement specifics down to Layer B.
+
+---
+
+## Personas — one file each, keyed by `slug` (revised 2026-07-30) — *framework, fixed*
+
+Every other Layer-A entry is manifest: a path-referenced singleton the loader lists and
+nothing validates. **`Persona` is the exception**, and it always was — `Story` files name
+personas **by slug**, so the slug is traversed, and a story naming a persona that doesn't
+exist is a dangling reference. That puts personas on the framework side of the line this
+document draws at [Why the line falls there](#why-the-line-falls-there): they are *not* inert
+to the type system.
+
+```
+product/personas/
+  first-time-buyer.md
+  repeat-buyer.md
+```
+
+```yaml
+---
+type: Persona
+slug: first-time-buyer
+name: First-time buyer
+emoji: 🧭        # optional; board rendering only
+---
+```
+
+**One file per persona, and no legend file.** The prior default (`product/personas.md` — a
+slug legend plus one section each) was carried over from aiviz and loses twice:
+
+- **Progressive disclosure.** Real persona documents run to hundreds of lines. Merged into one
+  file, loading any persona means loading all of them — against one of this project's two
+  stated principles. Separate files also give routing a precise target: an ingested fact about
+  one persona lands in that persona's file, not in a section of a shared one.
+- **A legend is a second source of truth.** A slug→emoji table living apart from the personas
+  goes stale, and detecting the staleness needs machinery that exists *only because the table
+  exists*. With `emoji` on the persona, the failure mode becomes "persona file missing" — real,
+  actionable, and checkable — instead of "legend is out of date."
+
+Surfaces that need the whole set (a Miro story-map legend, say) **derive** it by reading the
+files. Derived views are fine; a stored second copy is not.
+
+> **This overrides the manifest's split/merge freedom for this one entry.** The manifest may
+> normally split or merge files per implementation. Personas may not be merged back into a
+> single file, because the slug is a traversed key rather than a heading.
 
 ---
 
@@ -219,20 +291,61 @@ Nothing here is a copy of Jira. A `Todo` routed here has been *identified and at
 not *filed* — filing is a human act in the real system.
 ```
 
-**Why a pointer rather than a `backlog.md` list:** a markdown backlog in a repo is a shadow
-copy of the real tracker, and it rots the day it's written. This client has Jira; every client
-has something. The mesh's job is to **know where work goes**, not to be where work goes. A
-`Workflow` that points at Jira is honest about that; a `backlog.md` full of checkboxes is a
-second source of truth pretending otherwise.
+**Why a pointer rather than a container:** the mesh's job is to **know where work goes**, not
+to be where work goes. The pointer also keeps `derives-from` provenance intact — the `Todo`
+candidate records what was said, who said it, and which conversation it came from, then points
+at the queue where it belongs. That is strictly better than both "shadow backlog in the mesh"
+and "go type it into Jira yourself, we kept no record."
 
-The pointer also keeps `derives-from` provenance intact — the `Todo` candidate records what
-was said, who said it, and which conversation it came from, then points at the tracker where
-it belongs. That is strictly better than both "shadow backlog in the mesh" and "go type it
-into Jira yourself, we kept no record."
+### The queue may be in this repo (revised 2026-07-30, vocabulary v2.1)
 
-**A `Workflow` with no `external_ref` is legal** — a genuinely mesh-native process (a
-refinement ritual that is only a description) needs no external system. But a **backlog**
-with no `external_ref` is a smell: it means the mesh is about to become an issue tracker.
+Until v2.1 this section said a markdown backlog is *inherently* a shadow copy, and the
+validators implemented that by **looking for checkbox characters**. That test was wrong in
+both directions: it blocked a repo-native backlog that is legitimately the single record of
+work, and it would have passed a genuine shadow copy written without checkboxes.
+
+**The hazard is a second source of truth, not a syntax.** A file that duplicates a queue some
+other system already owns rots from the day it is written. A file that *is* the record of work
+does not — there is nothing for it to drift against.
+
+So `system: repo` is a first-class value, and `external_ref` may be a repo-relative path:
+
+```markdown
+---
+type: Workflow
+name: project-tasks
+system: repo
+external_ref: docs/project-status.md
+creates: Task
+---
+```
+
+The three rules that replace the checkbox test:
+
+| Condition | Verdict |
+|---|---|
+| No `system` **and** no `external_ref` | **BLOCKED** — nothing owns this queue. The real smell. |
+| `system: repo` + `external_ref` that **resolves** | **Fine**, checkbox list or not. |
+| `system: repo` + `external_ref` that **dangles** | **BLOCKED** — it points at nothing. |
+
+### `creates` — what the work becomes when it lands
+
+A `Workflow` says where work goes; `creates` says what it turns into there. This is what lets
+one mesh hold several queues that mean different things:
+
+| Workflow | `creates` | What a routed `Todo` becomes |
+|---|---|---|
+| `product-backlog.md` | `Story` | A real story — ID, template, parent `Solution`, backlog entry |
+| `project-tasks.md` | `Task` | Non-dev work with no discovery lineage |
+| `refinement.md` | *(absent)* | Nothing is created; the process is a ritual |
+
+Without `creates`, every queue looked alike and a `Todo` routed to one landed as an untyped
+line. `process/workflows/` already holds one file per process, so several coexisting queues
+need no new machinery — only this property.
+
+`via` may additionally name *how* creation happens (`via: ee-pm:story-management`). It is a
+**non-normative hint**: harness-agnosticism is a hard constraint, so tooling that does not
+recognize a `via` value must ignore it and proceed, never fail.
 
 ---
 
@@ -282,7 +395,7 @@ and cross-referenced — so they get **IDs**, not path-only references. They liv
 > folder names (`opportunity-solution-tree/` is the cross-iteration state; `iterations/` is the
 > per-cycle work).
 >
-> **Shared `product/` namespace.** Cross-cutting singletons (`product/personas.md`) and
+> **Shared `product/` namespace.** Cross-cutting context (`product/personas/`) and
 > per-domain discovery artifacts share the `product/` namespace. Whether a given `product/…`
 > file is cross-cutting or domain-scoped is answered by **whether it sits at the root or inside
 > a domain folder** — not by the path shape. Domain-prefixing keeps IDs globally unique
@@ -300,7 +413,32 @@ consistency.) Combined with the domain prefix, a full ID is e.g. `payments:OPP-0
 | Outcome | `outcomes/outcome-NNNN-slug.md` | `OUTCOME-NNNN` |
 | Opportunity | `opportunities/opportunity-NNNN-slug.md` | `OPP-NNNN` (frontmatter: `Parent Outcome`) |
 | Solution | `solutions/solution-NNNN-slug.md` | `SOL-NNNN` (frontmatter: `Parent Opportunity`) |
-| Assumption test | `assumptions/assumption-NNNN-slug.md` | `ASSUMPTION-NNNN` (frontmatter: `Parent Solution`) |
+
+Assumptions sit **beside** the tree, not inside it (moved 2026-07-30):
+
+| Artifact | Folder | ID format |
+|---|---|---|
+| Assumption test | `product/assumptions/assumption-NNNN-slug.md` | `ASSUMPTION-NNNN` (frontmatter: `Parent Solution`, **required**) |
+| Assumption map | `product/assumption-maps/SOL-NNNN-slug/miro-metadata.json` | sidecar; see [board-sidecars.md](board-sidecars.md) |
+
+**Why they moved out of `opportunity-solution-tree/`.** An assumption is tested **against a
+solution** — that edge is real and stays required. What is *not* required is an `Outcome` and
+`Opportunity` above that solution. A team can map assumptions for candidate solutions without
+having built a full tree, and that is a legal, expected configuration; nesting the folder
+inside `opportunity-solution-tree/` made such a project carry a tree-shaped directory
+containing only assumptions. The chain is satisfied as far up as it goes.
+
+Tracked work with **no discovery lineage** (added 2026-07-30, vocabulary v2.1):
+
+| Artifact | Folder | ID format |
+|---|---|---|
+| Task | `product/tasks/task-NNNN-slug.md` | `TASK-NNNN` — **no parent frontmatter** |
+
+A `Task` is work the team must do that does not trace to a `Solution` — run the workshop,
+chase the DPA, prepare the readout. The absent parent *is* the type; a task that turns out to
+trace to a solution was a `Story` all along. Tasks may also live **wholly outside the mesh**
+when the `Workflow` they route to points at an external tracker — in that case no file exists
+here, and the `Todo` candidate reaches `state: resolved` instead.
 
 Iteration-scoped, under `product/iterations/{YYYY-MM-DD-slug}/`:
 
@@ -314,8 +452,12 @@ Iteration-scoped, under `product/iterations/{YYYY-MM-DD-slug}/`:
 | Decisions log | `decisions.md` | append-only |
 
 Traceability chain (all via ID frontmatter): `Story → Solution → Opportunity → Outcome`,
-and within an iteration `Story → Epic`. This is the typed-edge graph from
-[knowledge-graph-model.md](knowledge-graph-model.md), instantiated.
+and within an iteration `Story → Epic`. `Assumption → Solution` hangs off the same chain. This
+is the typed-edge graph from [knowledge-graph-model.md](knowledge-graph-model.md),
+instantiated.
+
+Two deliberate exceptions: the chain is satisfied **as far up as it goes** (a solution with no
+opportunity above it is legal — see the assumptions note), and `Task` has no chain at all.
 
 ---
 

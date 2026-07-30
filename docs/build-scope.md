@@ -1,7 +1,7 @@
 # context-mesh — build scope (first cut)
 
 Status: scoping decision. Written 2026-07-16. The design is done deciding on paper
-(see the [README](../README.md)); this is what gets built first and — just as importantly —
+([the README](../README.md) Status); this is what gets built first and — just as importantly —
 what does not.
 
 ## The goal

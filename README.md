@@ -1,33 +1,9 @@
-# context-mesh (Claude)
+# context-mesh
 
 **The structure for where LLM context lives across an organization, and the process for
 populating it from conversations.** A plain-language overview of what it does today and what's
 next; for the authoritative detail, see the docs linked at the end (or start with
 [`docs/vocabulary.md`](docs/vocabulary.md), the locked schema everything references).
-
-The `-claude` in the repo name marks the **packaging**, not the design. The structure itself is
-LLM-agnostic — plain markdown, no vendor coupling — and this repo is its Claude Code
-distribution. A port to another harness would reuse [`docs/`](docs/) and
-[`prompts/`](prompts/) wholesale and replace only [`skills/`](skills/).
-
----
-
-## Install
-
-Packaged as the `ee-context-mesh` [Claude Code plugin](https://code.claude.com/docs/en/plugins):
-
-```
-/plugin marketplace add mitchell-ee/claude-plugins
-/plugin install ee-context-mesh@mitchell-ee-claude-plugins
-```
-
-That installs the three skills below. Start with `setup-mesh` against the repo you want to use
-as your Hub.
-
-**The plugin is a wrapper, not the substance.** Everything it stores is plain markdown, and the
-structure it defines ([`docs/`](docs/)) is deliberately vendor-neutral — the schema, the
-taxonomy, and the transcript-structuring prompt work with any LLM or tooling. Only the three
-skills are Claude-specific packaging.
 
 ---
 
@@ -36,7 +12,7 @@ skills are Claude-specific packaging.
 Durable engineering knowledge — a decision from a meeting, how a service really behaves, a
 newly-spotted product gap — rarely gets written down where it belongs. Meanwhile every AI
 coding tool in the org is starving for exactly that context, and each repo knows only about
-itself. In a big estate — the seeding case was ~100 service repos and no monorepo — there is no
+itself. In a big estate (the seeding client has ~100 service repos, no monorepo) there is no
 shared brain.
 
 context-mesh is that shared brain: a well-defined home for scattered knowledge, plus a
@@ -67,7 +43,7 @@ All singletons, referenced by path.
 
 | Area | Files |
 |---|---|
-| **Product** | `product/business-context.md`, `personas.md`, `design-principles.md`, `glossary.md` |
+| **Product** | `product/business-context.md`, `personas/{slug}.md`, `design-principles.md`, `glossary.md` |
 | **Technical** | `technical/target-architecture.md`, `integration-map.md`, `api-and-interface-standards.md`, `coding-standards.md`, `testing-standards.md`, `nfr.md` |
 | **Process & governance** | `process/ways-of-working.md`, `definition-of-done.md`, `review-and-release.md`; `governance/data-handling.md`, `access-control.md`, `compliance.md`, `ai-policy.md`; `capabilities/skill-governance.md` |
 | **Shared workflows** | `process/workflows/` — e.g. `refinement.md`, `incident-response.md` |
@@ -200,7 +176,3 @@ down. That end-to-end run is the next milestone, pending a real recording.
 - [build-scope.md](docs/build-scope.md) — what the first cut built and deliberately left out.
 - [setup-scope.md](docs/setup-scope.md) — how the Hub gets stood up and carved into domains; why
   there is no separate scaffolding command.
-- [promotion-boundary.md](docs/promotion-boundary.md) — promotion (staging → canonical) and where
-  the skills' job ends.
-- [knowledge-graph-model.md](docs/knowledge-graph-model.md) — why a knowledge graph rather than a
-  flat taxonomy (rationale; superseded on specifics by `vocabulary.md`).
