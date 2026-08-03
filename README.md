@@ -82,25 +82,29 @@ framework covers **everything the graph reasons over**.
 
 ## What's built today
 
-A conversation-to-context loop, packaged as three skills, plus one optional prompt that
-pre-cleans a raw transcript before the loop begins.
+A conversation-to-context loop, packaged as **four skills** — one of which also ships as a
+vendor-neutral prompt that runs anywhere.
 
 ### `setup-mesh` — get the Hub ready
 
-Finds or declares each **index** (Hub root and per domain) and writes a **pointer to where
-to-dos go** (Jira, Linear). It does *not* generate context files — it reports which are missing. A stub the index
-lists but that says nothing is worse than an honest gap.
+Finds or declares each **index** (Hub root and per domain) — the routing input, and the only
+one. It does *not* generate context files; it reports which are missing. A stub the index lists
+but that says nothing is worse than an honest gap.
 
 It also records the mesh's **PII policy** on the Hub root index — `strip` (the default: redact
 speaker identity) or `enrich` (preserve who-said-what, and take on the client + DPO custody that
-implies). Both the structuring prompt and `ingest-conversation` read it.
+implies). Both `structure-transcript` and `ingest-conversation` read it.
 
-### `prompts/structure-transcript.md` — clean up a raw transcript (optional pre-pass)
+### `structure-transcript` — clean up a raw transcript (optional pre-pass)
 
-A **vendor-neutral markdown prompt** — no scripts, no Claude-specific packaging. Any LLM can run
-it, or you can paste it into a meeting tool (Granola, etc.) as a template. It turns a raw
-transcript from *any* source into a clean, topically-labeled one: merged speaker turns, filler
-and abandoned tangents dropped, secrets redacted.
+Turns a raw transcript from *any* source into a clean, topically-labeled one: merged speaker
+turns, filler and abandoned tangents dropped, secrets redacted.
+
+It ships **twice, on purpose**. `prompts/structure-transcript.md` is a **vendor-neutral markdown
+prompt** — no scripts, no vendor packaging — that any LLM can run, or that you can paste into a
+meeting tool (Granola, etc.) as a template. The `structure-transcript` **skill** is a thin
+wrapper that runs that same prompt as `/structure-transcript`. The prompt is the source of
+truth; the skill restates none of its rules, so the two cannot drift.
 
 Meeting tools like Granola get their value from a *user-authored template inside that one tool*.
 This prompt does the same structuring as a **mesh artifact** instead, so it works on a raw
@@ -130,17 +134,17 @@ transcript → distilled typed chunks → proposed placements → checkpoint →
 ### `promote-candidate` — make staged knowledge official
 
 The separate, human-initiated step that moves a fact from staging into the canonical context
-everyone reads. Promotion has six outcomes: **merge** into the target doc, **contradicts** (a
-human decides), **handover** to the tracker, **resolve** an open question first, **no home**,
-or **never** (provenance records stay in staging). Edits to the same file are batched into one
-reviewed change.
+everyone reads. Promotion has five outcomes: **merge** into the target doc, **contradicts** (a
+human decides), **resolve** an open question first, **no home**, or **never** (provenance
+records stay in staging). Edits to the same file are batched into one reviewed change.
 
 ### Using it, start to finish
 
 1. **Once, then again to add a domain:** `setup-mesh`. Sets the PII policy while you're there.
 2. **After a meeting, if the transcript is raw and messy** (a Zoom/Meet/Teams export, not
-   pre-structured): run it through `prompts/structure-transcript.md` first for a clean, labeled
-   version. Optional — skip it for an already-tidy transcript.
+   pre-structured): run `structure-transcript` first for a clean, labeled version — or paste
+   `prompts/structure-transcript.md` into whatever tool holds the transcript. Optional — skip it
+   for an already-tidy transcript.
 3. **Then:** `ingest-conversation`. Review placements at the checkpoint; on approval
    they're written straight to staging.
 4. **When ready:** `promote-candidate`. It opens a **PR** into the canonical layer; approving
@@ -173,7 +177,8 @@ down. That end-to-end run is the next milestone, pending a real recording.
 - [board-sidecars.md](docs/board-sidecars.md) — optional visual-board attachments.
 - [ingestion-pipeline.md](docs/ingestion-pipeline.md) — the ingestion pipeline in detail.
 - [prompts/structure-transcript.md](prompts/structure-transcript.md) — the optional
-  vendor-neutral pre-pass that cleans and labels a raw transcript.
+  vendor-neutral pre-pass that cleans and labels a raw transcript. The `structure-transcript`
+  skill wraps it; this file is the source of truth.
 - [build-scope.md](docs/build-scope.md) — what the first cut built and deliberately left out.
 - [setup-scope.md](docs/setup-scope.md) — how the Hub gets stood up and carved into domains; why
   there is no separate scaffolding command.

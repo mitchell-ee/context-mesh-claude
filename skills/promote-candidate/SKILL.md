@@ -1,6 +1,6 @@
 ---
 name: promote-candidate
-description: Promote approved staging candidates into canonical context — merge facts into their target files (batched per file), hand to-dos over to the tracker, and resolve open questions. Use when asked to promote, land, or accept staged context, or to clear the Hub's staging/candidates.
+description: Promote approved staging candidates into canonical context — merge facts into their target files (batched per file), flag contradictions for a human, and resolve open questions. Use when asked to promote, land, or accept staged context, or to clear the Hub's staging/candidates.
 ---
 
 # Promote a candidate out of staging

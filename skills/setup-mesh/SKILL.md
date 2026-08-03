@@ -16,8 +16,8 @@ It is **committed** — a property of the domain and its team, the same for whoe
 
 > **This skill had a second job until v2.2**: configuring where to-dos go (the backlog
 > workflow pointer). The workflow layer is deferred — the mesh holds context, and a queue is
-> the work itself. The design is retained privately
-> and may return as a future feature.
+> the work itself. See
+> The design is retained privately.
 
 **There is no separate scaffolding command.** Adding a domain is **this same skill run again**;
 it is idempotent, so there is no separate "add" mode
@@ -27,8 +27,8 @@ them, and don't maintain a membership list.
 **Always check the Hub root.** Every run: if it has no `context-index.md`, stand it up first.
 
 **The root index carries the PII policy.** Its Identity section has a `**PII policy:**` line —
-`strip` (the default) or `enrich` — read by both the transcript structurer
-([prompts/structure-transcript.md](../../prompts/structure-transcript.md)) and
+`strip` (the default) or `enrich` — read by both the transcript structurer (the
+`structure-transcript` skill and [its prompt](../../prompts/structure-transcript.md)) and
 `ingest-conversation`. `strip` redacts speaker identity; `enrich` preserves who-said-what and
 takes on client + DPO custody obligations. Scaffold writes `strip`; changing it to `enrich` is
 a deliberate data-custody decision, not a setup default — surface it, don't flip it unasked.

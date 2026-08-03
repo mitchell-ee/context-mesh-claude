@@ -122,8 +122,9 @@ is stripped. **No path through this skill writes raw PII to disk.**
 redact secrets and non-participant PII. `enrich` narrows *what* counts as PII here; it never
 turns sanitization off.
 
-**If the input is already structured** — by [the transcript structurer](../../prompts/structure-transcript.md)
-or a Granola template — this pass is *lighter*, because a first sanitization already ran. It is
+**If the input is already structured** — by the `structure-transcript` skill, by
+[its underlying prompt](../../prompts/structure-transcript.md) run elsewhere, or by a Granola
+template — this pass is *lighter*, because a first sanitization already ran. It is
 **never skipped.** The structurer may run entirely outside the mesh's control, so stage 1b stays
 unconditional and authoritative: it is the last sanitizer, not the only one. Structured input is
 still just a transcript — it flows through this same stage-1 path, no special case.
@@ -166,7 +167,8 @@ the vocabulary:
 **Action items are out of scope — do not type them.** "Chase the DPA", "book the workshop",
 "file a ticket for X" are *the work*, not context about it. The mesh supports context; where
 work gets queued is the team's tracker's job, and every team's is different. There was a
-`Todo` type through v2.1; it is deferred, and the design is retained privately.
+`Todo` type through v2.1; it is deferred
+(deferred; the design is retained privately).
 
 **Report them, don't drop them silently.** List the action items the transcript contained in
 the run summary, so the human can put them wherever they actually track work. Noticing one is

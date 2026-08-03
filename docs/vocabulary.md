@@ -51,8 +51,8 @@ Group-B/C node or are dropped. Every Group-A node **must** carry `derives-from`.
 | `DomainFact` | A fact specific to one domain — its code, quirks, conventions. | that domain's canonical context (Group C) |
 | `OpenQuestion` | An undecided point needing a human decision. | resolves into one of the above |
 
-> **`Todo` was a Group-A type through v2.1** and is deferred as of v2.2; the design is
-> retained privately and may return as a future feature. A conversation that produces
+> **`Todo` was a Group-A type through v2.1** and is deferred as of v2.2 — the design is retained privately
+> and may return as a future feature. A conversation that produces
 > an action item still produces one; the mesh no longer types or routes it. Ingestion reports
 > it as out of scope rather than placing it.
 
@@ -397,8 +397,8 @@ field. See Group B.
 ### v2.1 (2026-07-30) — `Task`, keyed `Persona`, `Workflow` creation targets
 
 > **Superseded in part by v2.2.** `Task`, `Workflow.creates`, and `Workflow.via` were all
-> deferred out of the schema on 2026-08-03; the design is retained privately and may return
-> as a future feature. The `Persona` and
+> deferred out of the schema on 2026-08-03 — the design is retained privately
+> and may return as a future feature. The `Persona` and
 > `Assumption` changes below remain live (the assumption's parent is now optional, per v2.2).
 > Kept as the record of why they were added.
 
@@ -498,7 +498,7 @@ because there is only one.
 ### v1.3 (2026-07-16) — `state: resolved`
 
 > **Superseded by v2.2** — `state: resolved` is deferred with the workflow layer it served.
-> The design is retained privately and may return as a future feature.
+> The design is retained privately.
 
 The `state` tag gains a third value for a candidate promoted **out of** the mesh rather than
 into it: a `Todo` handed over to the Jira/Linear project its `Workflow` names. Minor bump — a
@@ -517,8 +517,8 @@ vocabulary now says so explicitly.
 
 ### v1.2 (2026-07-16) — `Workflow` properties and storage
 
-> **Superseded by v2.2** — the whole `Workflow` layer is deferred. The retained private
-> design carries this storage rule and the finding that produced it.
+> **Superseded by v2.2** — the whole `Workflow` layer is deferred. See
+> The retained private design carries this storage rule and the finding that produced it.
 
 `Workflow` gains `name` / `system` / `external_ref` and, in
 [file-taxonomy.md](file-taxonomy.md), a physical home at `process/workflows/`. Minor bump: no

@@ -29,7 +29,7 @@ flowchart TD
     M["A meeting happens<br/><i>(Granola, Zoom, Slack, notes)</i>"]
 
     subgraph INGEST["② INGESTION — once per conversation"]
-        P["<b>structure-transcript</b><br/><i>optional pre-pass:</i> clean + label<br/>never types, never routes"]
+        P["<b>/structure-transcript</b><br/><i>optional pre-pass:</i> clean + label<br/>never types, never routes<br/><i>(also a plain prompt — runs anywhere)</i>"]
         I1["<b>/ingest-conversation</b><br/>1 · sanitize + identify the source<br/>2 · distill into typed chunks<br/>3 · propose placements<br/>3.5 · dedup against the target"]
         GATE1{{"<b>HUMAN CHECKPOINT</b><br/>every placement, least-confident first<br/>approve · retry N · drop N"}}
         P --> I1
@@ -72,7 +72,7 @@ flowchart TD
 | Step | What it does | Who decides |
 |---|---|---|
 | **`/setup-mesh`** | Surveys the Hub, scaffolds containers, helps declare each `context-index.md`. Idempotent — re-run it to add a domain. | A human supplies *what a file is about* and *when to load it*. A script cannot guess those. |
-| **`structure-transcript`** | Optional. Turns a raw transcript into a clean, labelled one. **Cleanup and labelling only** — it never assigns a type. | — |
+| **`/structure-transcript`** | Optional. Turns a raw transcript into a clean, labelled one. **Cleanup and labelling only** — it never assigns a type. Also available as a plain prompt (`prompts/structure-transcript.md`) to run in any tool. | — |
 | **`/ingest-conversation`** | Sanitizes, distils into typed chunks, proposes a placement per chunk, then dedups against the one file routing chose. | — |
 | **The checkpoint** | Every proposed placement, **least-confident first**. | **You.** `approve`, `retry N <reason>`, or `drop N`. |
 | **`staging/candidates/`** | Where approved candidates land. Written directly — no PR. | — |

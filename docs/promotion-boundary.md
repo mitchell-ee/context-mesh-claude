@@ -105,7 +105,7 @@ and a second repo.
 
 ## Open, deliberately
 
-- **Retention policy for archived transcripts** — a client + DPO call, deliberately open,
+- **Retention policy for archived transcripts** — a client + DPO call, tracked in `todo.md`,
   unaffected by the collapse.
 - **How domain ownership is declared.** Repo boundaries used to make "authored in exactly one
   place" structurally true. It is still true by construction in one repo, but *which team owns

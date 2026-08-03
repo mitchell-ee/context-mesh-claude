@@ -53,9 +53,11 @@ how it gets *populated*.
   **source reference** plus source, date, participants (role-anonymized if required), and a
   content hash — see [vocabulary.md](vocabulary.md#conversation--required-properties-added-v11-2026-07-16)
   (v1.1). The raw transcript is **discarded** after distillation.
-- An **optional pre-pass** can clean and label the raw transcript *before* stage 1 —
-  [`prompts/structure-transcript.md`](../prompts/structure-transcript.md), a vendor-neutral
-  prompt that does what a good Granola template does but for any transcript from any tool. It is
+- An **optional pre-pass** can clean and label the raw transcript *before* stage 1 — the
+  `structure-transcript` skill, or equivalently
+  [`prompts/structure-transcript.md`](../prompts/structure-transcript.md) run anywhere (the
+  skill is a thin wrapper around that prompt, which stays the source of truth). It does what a
+  good Granola template does, but for any transcript from any tool. It is
   a pre-pass, **not** stage 1: it only cleans and labels (never types, never routes), and its
   output is still just a transcript that enters stage 1 the same way raw input does. Sanitization
   here (1b) stays unconditional even when the pre-pass has already run once.
@@ -165,14 +167,14 @@ it (and writing its edges)". Against ten real candidates, that is wrong twice ov
 
 - **It is a merge, not a move.** Only one of ten resembled moving a file. A `DomainFact` lands
   *in a section of an existing document*, extending or qualifying what's there.
-- **It is not one verb.** Four outcomes, and the classifier decides which:
+- **It is not one verb.** Five outcomes, and the classifier decides which:
   **MERGE** (into the target file) · **CONTRADICTS** (target says the opposite — a human
   decides whether the doc or the world moves; never auto-applied) ·
   **RESOLVE** (an `OpenQuestion` doesn't promote — it resolves into another type first, via
   the guided-resolution flow below) · **NO-HOME** (`target: null`; fix the manifest first) ·
   **NEVER** (a `Conversation` is a provenance root and stays).
   (A fifth, **HANDOVER**, routed an item to the `Workflow` that owned its queue; it went with
-  the workflow layer in v2.2 — the design is retained privately and may return as a future feature.)
+  the workflow layer in v2.2; the design is retained privately.)
 
 **Batched by target file.** Three of run 1's candidates targeted one document; promoting them
 singly would mean three conflicting PRs against the same file and a human reading it three
