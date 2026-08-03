@@ -28,7 +28,7 @@ replace it.
 
 It does **not**:
 
-- assign any node type (Knowledge, DomainFact, Todo, Requirement, OpenQuestion, …),
+- assign any node type (Knowledge, DomainFact, Requirement, OpenQuestion, …),
 - decide what is `decided` vs. `undecided`,
 - touch domains, indexes, routing, or the vocabulary,
 - output typed chunks or anything a downstream tool would parse as structured data.
@@ -145,7 +145,7 @@ the API key is still redacted.
 
 ## What this does NOT do
 
-- **No types.** It never labels a turn as Knowledge / Requirement / Todo / etc.
+- **No types.** It never labels a turn as Knowledge / Requirement / DomainFact / etc.
 - **No decided/undecided call.** It keeps disagreements and open threads as spoken.
 - **No routing.** It knows nothing about domains, indexes, or where anything will live.
 - **No vocabulary.** It never touches the mesh schema.

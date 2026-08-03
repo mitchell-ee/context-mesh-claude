@@ -10,14 +10,10 @@ what this survey classifies as needing it.
 
 Three states, and the middle one is the point:
 
-  READY      an index exists, what it lists is real, a Todo can route. Nothing to do.
-  PARTIAL    ingestion can run, but something is degraded (usually: no workflow, so
-             Todos can't route). A note, not a blocker.
+  READY      an index exists and what it lists is real. Nothing to do.
+  PARTIAL    ingestion can run, but something is degraded (an index listing nothing,
+             a scaffold stub nobody filled in). A note, not a blocker.
   BLOCKED    ingestion cannot run or would misroute. Needs a human.
-
-The Hub ROOT is surveyed like a domain, with one difference: having no workflow is
-CORRECT there (Todos route to the domain that owns the work), so it is not counted
-against it.
 
 Usage:
     survey_mesh.py <hub-root>
@@ -34,40 +30,44 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import check_setup  # noqa: E402  (deliberate: the survey is a layer over the checker)
+import scaffold_domain  # noqa: E402  (for what it actually creates -- never a second copy)
 
 INDEX = check_setup.INDEX
+DOMAINS_DIR = scaffold_domain.DOMAINS_DIR
 
 
-def looks_like_domain(path):
-    """A directory we should survey rather than skip.
+def scaffold_dirs(is_hub):
+    """The containers scaffold_domain.py would create here. Imported, never restated.
 
-    Deliberately loose: a domain with an index is obviously one, but a domain WITHOUT an
-    index is exactly the case the survey exists to report. So we also accept anything
-    holding the usual context dirs.
+    The survey used to keep its own hardcoded list, which drifted: it promised
+    `process/workflows/` for every BLOCKED repo including the root, while the scaffold
+    correctly created it only for domains (Minotaur finding 5). Reading the constants
+    means the promise cannot disagree with the behaviour.
     """
-    if not os.path.isdir(path):
-        return False
-    if os.path.isfile(os.path.join(path, INDEX)):
-        return True
-    return any(os.path.isdir(os.path.join(path, d))
-               for d in ("technical", "product", "process"))
+    dirs = scaffold_domain.ROOT_DIRS if is_hub else scaffold_domain.DOMAIN_DIRS
+    return [d.replace(os.sep, "/") + "/" for d in dirs]
 
 
 def discover(hub_root):
-    """Every domain folder in the Hub. One level down, never deeper -- domains do not nest.
+    """Every domain folder in the Hub: the directories under `domains/`. Never deeper.
 
-    This used to have to guess a mesh layout (`hub/` beside `repos/<name>/`, or flat) and
-    identify which repo was the control plane by reading its index. With one repo the
-    answer is structural: the root is the root, and its subdirectories are the domains.
+    There is no heuristic here, deliberately. Through v2.1 domains sat at the Hub root
+    beside the cross-cutting folders, so this had to GUESS which top-level directories
+    were domains -- it accepted anything containing a `product/`, `technical/`, or
+    `process/` subdirectory. In the first third-party run that reported a `docs/product/`
+    market-research folder as a BLOCKED domain and printed scaffold instructions for it,
+    while the repo's actual product tree went undetected because it had no such subdir.
+    The heuristic found the wrong one of the two.
+
+    A domain is now a directory under `domains/`, and nothing else is one. That deletes
+    the problem class rather than tuning it: no ignore list, no detection rule, nothing
+    to misfire. (vocabulary v2.2)
     """
-    found = []
-    for name in sorted(os.listdir(hub_root)):
-        if name.startswith("."):
-            continue
-        p = os.path.join(hub_root, name)
-        if looks_like_domain(p):
-            found.append(p)
-    return found
+    root = os.path.join(hub_root, DOMAINS_DIR)
+    if not os.path.isdir(root):
+        return []
+    return [os.path.join(root, name) for name in sorted(os.listdir(root))
+            if not name.startswith(".") and os.path.isdir(os.path.join(root, name))]
 
 
 def survey_one(repo, hub=False, hub_root=None):
@@ -86,7 +86,14 @@ def survey_one(repo, hub=False, hub_root=None):
             "has_index": False,
             "problems": [f"No {INDEX} -- invisible to routing."],
             "notes": [],
-            "needs": [INDEX, "staging/candidates/", "process/workflows/"],
+            # Must match what scaffold_domain.py actually creates. It listed
+            # `process/workflows/` here unconditionally -- hardcoded into the BLOCKED
+            # branch, before anything knew whether this was the root -- while the scaffold
+            # correctly created it only for domains. The survey promised a directory the
+            # scaffold would not produce (Minotaur finding 5). The workflow layer is gone
+            # as of v2.2, but the lesson stands: this list is a claim about another
+            # script's behaviour, so it belongs next to that script's constants.
+            "needs": [INDEX] + list(scaffold_dirs(hub)),
             "asks": ["index entries (what each file is about, and when to load it)"],
         }
 
@@ -103,51 +110,18 @@ def survey_one(repo, hub=False, hub_root=None):
         problems.append(f"Index lists `{p}` but it does not exist -- facts would route "
                         f"into a vacuum.")
 
-    wf_files = check_setup.find_workflow_files(repo)
-    wf_declared = check_setup.has_workflows_section(index_text)
-
     # Two different kinds of missing thing, and conflating them is what makes a survey
     # useless at scale:
     #   needs      -- CONTAINERS. scaffold_domain.py creates them unattended.
     #   asks       -- CLAIMS. Only the team knows the answer; a script cannot invent it.
     needs, asks = [], []
 
-    if not wf_files:
-        if hub:
-            notes.append("No workflow -- correct at the Hub root; Todos route to the "
-                         "domain that owns the work.")
-        else:
-            notes.append("No workflow declared -- Knowledge and facts route fine, "
-                         "**Todos cannot**.")
-            # NOT scaffoldable. A workflow file needs `system` + `external_ref` naming
-            # where work really goes -- a fact about the team, not a container. Scaffolding
-            # an empty one would create exactly what check_setup blocks: a workflow with
-            # no declared owner, i.e. a queue that is a second source of truth.
-            asks.append("where this team queues work (Jira/Linear/a file in this repo/...)")
-    else:
-        if not wf_declared:
-            problems.append("Workflow file(s) exist but the index has no Workflows section "
-                            "-- routing cannot see them, so Todos still cannot route.")
-        for f in wf_files:
-            full = os.path.join(repo, "process", "workflows", f)
-            system, ref, dangling = check_setup.workflow_ownership(full, repo)
-            if not system and not ref:
-                problems.append(f"`process/workflows/{f}` declares no owning system "
-                                f"(no `system:`, no `external_ref:`) -- nothing owns this "
-                                f"queue.")
-            elif dangling:
-                problems.append(f"`process/workflows/{f}` points at `{ref}`, which does "
-                                f"not exist -- it sends action items nowhere.")
-            elif not ref:
-                notes.append(f"`process/workflows/{f}` has `system: {system}` but no "
-                             f"`external_ref` -- legal for a ritual, incomplete for a queue.")
-
     # Containers scaffolding would create. Absent ones are not problems -- they are
     # exactly what `scaffold_domain.py` fixes without a human.
-    if not os.path.isdir(os.path.join(repo, "staging", "candidates")):
-        needs.append("staging/candidates/")
-    if not hub and not os.path.isdir(os.path.join(repo, "process", "workflows")):
-        needs.append("process/workflows/")
+    dirs = scaffold_domain.ROOT_DIRS if hub else scaffold_domain.DOMAIN_DIRS
+    for d in dirs:
+        if not os.path.isdir(os.path.join(repo, d)):
+            needs.append(d.replace(os.sep, "/") + "/")
 
     # A scaffolded-but-unfilled index: the container exists and the claims don't. This
     # is the state scaffolding deliberately leaves behind, and the survey is how a human
@@ -218,7 +192,8 @@ def report(results):
 
     if not domains:
         print("  NO DOMAINS YET. The Hub holds only cross-cutting context so far. Add one")
-        print("  per thing you want context about: scaffold_domain.py <hub> <domain>.")
+        print("  per thing you want context about: scaffold_domain.py <hub> <domain>,")
+        print(f"  which creates {DOMAINS_DIR}/<domain>/.")
         print()
 
     for label, group in (("BLOCKED", blocked), ("PARTIAL", partial), ("READY", ready)):
@@ -253,8 +228,8 @@ def report(results):
     if human:
         names = ", ".join("(hub root)" if r["is_hub"] else r["name"] for r in human)
         print(f"  NEEDS A HUMAN -- {names}")
-        print("    What a file is about, when to load it, and where work gets queued are")
-        print("    claims about the team. A script that guessed them would be believed.")
+        print("    What a file is about and when to load it are claims about the team.")
+        print("    A script that guessed them would be believed.")
         print()
     if not scaffoldable and not human:
         print("  Nothing. The Hub and every domain are ready.")

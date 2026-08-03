@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Check whether the Hub root, or one domain folder, is set up to receive ingested context.
 
-Answers one question: can ingestion actually run here? Three things decide it --
+Answers one question: can ingestion actually run here? Two things decide it --
   1. an index exists (routing reads it, and only it)
-  2. what it lists is real (a listed-but-missing file routes into a vacuum)
-  3. a workflow is declared (or every Todo is unroutable)
+  2. it lists something, and what it lists is real
 
 Deliberately does NOT check for the default manifest's context files. The file list is the
 manifest -- per-implementation config, not a spec to conform to. A repo missing
 `design-principles.md` isn't broken; it's a repo without design principles. Absent files are
 an honest gap ingestion reports when it hits them.
+
+Workflow config was check #3 through v2.1 ("a workflow is declared, or every Todo is
+unroutable"). The whole workflow layer is deferred as of vocabulary v2.2 -- the mesh holds
+context, not work; the design is retained privately.
 
 Usage:
     check_setup.py <hub-root-or-domain-dir>
@@ -25,7 +28,18 @@ import sys
 INDEX = "context-index.md"
 
 # A markdown link to a repo-relative .md file: [label](path/to/file.md)
+#
+# This regex is the ONLY way a context file gets declared, which makes it a convention the
+# author has to know about. It is stated in templates/context-index.md, which ships an
+# example row -- earlier it shipped an empty table and said nothing, and an index written
+# with backticked paths parsed to zero files while reporting READY (fail-open #9).
 LINK = re.compile(r"\[[^\]]+\]\(([^)#]+\.md)\)")
+
+# HTML comments are guidance for the author, not entries. The index templates explain the
+# row format inside a comment, and a commented-out row is a normal way to park an entry --
+# in both cases the text is NOT a claim that the file exists, so parsing it would report a
+# missing file the index never actually listed. Stripped before any link is read.
+COMMENT = re.compile(r"<!--.*?-->", re.S)
 
 
 def find_listed_files(index_text):
@@ -42,7 +56,7 @@ def find_listed_files(index_text):
     so both kinds are returned and the caller decides; see `find_missing`.
     """
     out = []
-    for m in LINK.finditer(index_text):
+    for m in LINK.finditer(COMMENT.sub("", index_text)):
         p = m.group(1).strip()
         if p.startswith(("http://", "https://", "/")):
             continue
@@ -74,54 +88,6 @@ def find_missing(listed, base, root=None):
     return out
 
 
-def has_workflows_section(index_text):
-    return bool(re.search(r"^##+\s*Workflows\b", index_text, re.M | re.I))
-
-
-def find_workflow_files(repo_root):
-    d = os.path.join(repo_root, "process", "workflows")
-    if not os.path.isdir(d):
-        return []
-    return sorted(f for f in os.listdir(d) if f.endswith(".md"))
-
-
-def workflow_ownership(path, repo):
-    """Does this workflow declare who owns its queue, and does that pointer resolve?
-
-    Returns (system, external_ref, dangling) where `dangling` is True only when
-    external_ref names a repo-relative path that does not exist.
-
-    Deliberately does NOT look for checkbox characters. Through v2.0 it did, and that
-    test was wrong in both directions: it blocked a repo-native backlog that is
-    legitimately the single record of work, and it would pass a genuine shadow copy
-    written without checkboxes. The hazard is a SECOND SOURCE OF TRUTH -- a queue some
-    other system already owns -- so the thing to check is whether an owner is declared
-    and whether the pointer resolves. (vocabulary.md v2.1)
-    """
-    try:
-        with open(path) as fh:
-            text = fh.read()
-    except OSError:
-        return None, None, False
-
-    m_sys = re.search(r"^system:\s*(\S+)", text, re.M)
-    m_ref = re.search(r"^external_ref:\s*(\S+)", text, re.M)
-    system = m_sys.group(1).strip() if m_sys else None
-    ref = m_ref.group(1).strip() if m_ref else None
-
-    # `null`/`none` is an absent ref written out longhand, not a pointer.
-    if ref and ref.lower() in ("null", "none", "~"):
-        ref = None
-
-    dangling = False
-    if ref and not re.match(r"^[a-z][a-z0-9+.-]*://", ref):
-        # Not a URL -- treat as a repo-relative path, which must actually exist.
-        # A dangling path is a real failure: it points at nothing.
-        dangling = not os.path.exists(os.path.join(repo, ref))
-
-    return system, ref, dangling
-
-
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     quiet = "--quiet" in sys.argv
@@ -150,15 +116,44 @@ def main():
     with open(index_path) as fh:
         index_text = fh.read()
 
-    # 2. Does what it lists exist?
+    # 2. Does it list anything at all?
+    #
+    # An index that parses to ZERO files used to sail through: find_missing() had nothing
+    # to iterate, no problem was appended, and the report printed "READY. An index exists,
+    # what it lists is real" -- a claim about an empty set. That is fail-open #9, and the
+    # one that mattered most, because READY is the gate for running ingestion. Routing
+    # reads the index and only the index; an index listing nothing routes nothing.
+    #
+    # The usual cause is not an empty index but an index whose rows aren't markdown links
+    # (backticked paths, plain text), so LINK matches none of them. Say that out loud --
+    # the author's index may look complete to them.
     listed = find_listed_files(index_text)
+    if not listed:
+        # A NOTE, not a problem -- but it must be said out loud, which is the whole fix.
+        # This case used to be invisible: zero listed files meant find_missing() had
+        # nothing to iterate, no problem was raised, and the report printed "READY ...
+        # what it lists is real" -- a claim about an empty set (fail-open #9). READY is
+        # the gate for running ingestion, so a silent pass here is the worst of them.
+        #
+        # It is not BLOCKED because `scaffold_domain.py` deliberately writes an index with
+        # no rows: a container, never a claim. Calling the scaffold's own output broken
+        # would make the two scripts contradict each other, which is the shape of the bug
+        # that started this. Empty is an honest gap to fill, not an error -- so say so,
+        # name the usual cause, and let the READY line stop over-claiming.
+        notes.append(
+            f"{INDEX} lists no context files, so routing can see nothing here yet. Rows are "
+            f"only read as markdown links -- `[label](technical/system-behavior.md)`; a "
+            f"backticked or plain-text path parses to nothing. If this is a fresh scaffold, "
+            f"this is expected: fill the index in before ingesting here.")
+
+    # 3. Does what it lists exist?
     missing = find_missing(listed, repo)
     for p in missing:
         problems.append(
             f"Index lists `{p}` but the file does not exist. Ingestion will route facts to "
             f"it and they will land in a vacuum. Remove the entry, or create the file.")
 
-    # 3. Present but unlisted -- invisible to routing.
+    # 4. Present but unlisted -- invisible to routing.
     #
     # Only PATH-REFERENCED singletons need a link. Discovery artifacts (the OST) are
     # ID-referenced by design: the index lists the tree as IDs + titles so an agent can
@@ -167,7 +162,7 @@ def main():
     # the index on every new opportunity.
     listed_set = set(listed)
     ost_ids = set(re.findall(
-        r"\b(OUTCOME|OPP|SOL|ASSUMPTION|STORY|EPIC|TASK)-(\d{4})\b", index_text))
+        r"\b(OUTCOME|OPP|SOL|ASSUMPTION|STORY|EPIC)-(\d{4})\b", index_text))
 
     for sub in ("technical", "product", "process"):
         d = os.path.join(repo, sub)
@@ -180,18 +175,14 @@ def main():
                 rel = os.path.relpath(os.path.join(root, f), repo)
                 if rel in listed_set:
                     continue
-                # Workflows are declared in their own section; checked below.
-                if rel.startswith(os.path.join("process", "workflows")):
-                    continue
 
                 # An ID'd discovery artifact is declared by its ID, not a link.
                 m = re.search(
-                    r"(outcome|opportunity|solution|assumption|story|epic|task)-(\d{4})",
+                    r"(outcome|opportunity|solution|assumption|story|epic)-(\d{4})",
                     os.path.basename(rel))
                 if m:
                     prefix = {"outcome": "OUTCOME", "opportunity": "OPP", "solution": "SOL",
-                              "assumption": "ASSUMPTION", "story": "STORY", "epic": "EPIC",
-                              "task": "TASK"}
+                              "assumption": "ASSUMPTION", "story": "STORY", "epic": "EPIC"}
                     if (prefix[m.group(1)], m.group(2)) in ost_ids:
                         continue  # declared by ID in the index tree. Correct.
                     notes.append(
@@ -201,50 +192,6 @@ def main():
 
                 notes.append(
                     f"`{rel}` exists but is not listed in the index -- routing cannot see it.")
-
-    # 4. The workflow. This is the one that decides whether a Todo can route.
-    wf_files = find_workflow_files(repo)
-    wf_declared = has_workflows_section(index_text)
-
-    if not wf_files:
-        # NOT blocking. A domain without a workflow is one where Todos cannot route -- a
-        # real consequence, but not a broken domain. The Hub root has no team backlog by
-        # design (Todos route to the domain that owns the work); a team may genuinely have
-        # no tracker. "Blocked" must mean ingestion cannot run, not "this differs
-        # from payments" -- otherwise the check nags every domain that is legitimately
-        # different, and gets ignored.
-        notes.append(
-            "No workflow declared (`process/workflows/`). Knowledge and facts still route "
-            "fine; **`Todo`s cannot** -- a Todo may only be `routed-to` a Workflow. If this "
-            "team queues work somewhere (Jira, Linear), run setup-mesh job 2. If it doesn't "
-            "-- e.g. this is the Hub root, where Todos route to the owning domain -- "
-            "this is correct.")
-    else:
-        if not wf_declared:
-            problems.append(
-                f"Workflow file(s) exist ({', '.join(wf_files)}) but the index has no "
-                f"Workflows section. Routing reads the index -- an undeclared workflow is "
-                f"invisible, so Todos still cannot route.")
-        for f in wf_files:
-            full = os.path.join(repo, "process", "workflows", f)
-            system, ref, dangling = workflow_ownership(full, repo)
-            if not system and not ref:
-                problems.append(
-                    f"`process/workflows/{f}` declares no owning system: it has neither "
-                    f"`system:` nor `external_ref:`. Nothing owns this queue, so a Todo "
-                    f"routed here lands in a list that is a second source of truth for work "
-                    f"tracked elsewhere. Name the system (`jira`, `linear`, or `repo`) and "
-                    f"where it is.")
-            elif dangling:
-                problems.append(
-                    f"`process/workflows/{f}` points at `{ref}`, which does not exist. A "
-                    f"workflow is a pointer; one that resolves to nothing sends action items "
-                    f"nowhere.")
-            elif not ref:
-                notes.append(
-                    f"`process/workflows/{f}` names `system: {system}` but has no "
-                    f"`external_ref`. Legal for a genuinely mesh-native process (a ritual "
-                    f"that is only a description). For a queue, add where it actually is.")
 
     if quiet:
         return 1 if problems else 0
@@ -272,14 +219,16 @@ def report(repo, problems, notes):
         print()
 
     if not problems:
-        todos_ok = not any("No workflow declared" in n for n in notes)
-        if todos_ok:
-            print("READY. An index exists, what it lists is real, and a Todo has somewhere "
-                  "to go.")
+        # The verdict must not claim more than was checked. "What it lists is real" is
+        # vacuously true of an empty list, which is precisely how fail-open #9 read as a
+        # pass -- so an index that lists nothing gets its own wording.
+        empty = any("lists no context files" in n for n in notes)
+        if empty:
+            print("READY to run -- but NOTHING TO ROUTE TO. The index exists and nothing in "
+                  "it is broken, because it lists nothing (see notes). Ingestion will report "
+                  "every fact as having no home until the index lists a file.")
         else:
-            print("READY for context -- but NOT for Todos. An index exists and what it lists "
-                  "is real, so Knowledge and facts route fine. No workflow is declared, so "
-                  "action items have nowhere to go (see notes).")
+            print("READY. An index exists, it lists context files, and those files are real.")
         print()
         print("Missing context files are NOT checked -- the file list is the manifest, and a")
         print("repo without a given file is a repo without that context, not a broken repo.")

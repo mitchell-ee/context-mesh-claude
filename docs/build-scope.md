@@ -1,7 +1,7 @@
 # context-mesh — build scope (first cut)
 
 Status: scoping decision. Written 2026-07-16. The design is done deciding on paper
-([the README](../README.md) Status); this is what gets built first and — just as importantly —
+(see the project status); this is what gets built first and — just as importantly —
 what does not.
 
 ## The goal
@@ -126,7 +126,7 @@ side of the scaffolding line:
 | Setup **does** | Setup **does not** |
 |---|---|
 | Find `context-index.md`, or declare one from what already exists | **Generate context files** |
-| Declare the workflow — where to-dos go — and write the pointer | Author any file's content |
+| Report an index that lists nothing (routing can see no home) | Author any file's content |
 | Report which files are listed-but-missing / present-but-unlisted | Emit the default manifest |
 
 **Why the line falls there.** Generating context files means generating the **manifest** —
@@ -136,17 +136,17 @@ nothing, and *routing reads the index*. Ingestion would confidently route a fact
 `business-context.md — why the platform exists` and land it in a stub. **An absent file is an
 honest gap the skill reports; an empty file is a lie the skill believes.**
 
-**Why setup is nonetheless needed.** The workflow half has no path today: a `Todo` may only be
-`routed-to` a `Workflow`, and a real repo has no declared workflow and no way to get one short
-of hand-authoring. That's not scaffolding — it's the thing ingestion needs to run at all
-(v1.2, and run 1's two unroutable `Todo`s).
+> **Amended v2.2 (2026-08-03).** Setup had a second job — declaring the workflow that
+> to-dos route to — and it is gone with the workflow layer
+> (deferred; the design is retained privately). Setup is now the index
+> job alone. The decision-4 line below is unchanged; it never depended on workflows.
 
 **Amended 2026-07-21 — scaffolding *is* setup, and the line above survives the scale-up.**
 There is no separate `/mesh-init` (see [setup-scope.md](setup-scope.md)). Setup generalizes to a
 prompted **set** of repos, stands up the Hub on every run if absent, and is **idempotent**, so
 "run it again in a new repo" is the add path rather than a second mode. What that adds to the
 right-hand column above is only **containers**: setup creates directories
-(`staging/candidates/`, `process/workflows/`) and the index file itself, but still **never
+(`staging/candidates/`) and the index file itself, but still **never
 creates a context file listed in that index**. An empty directory routes nothing and an empty
 index honestly says "no context yet"; only a stub *listed as* holding something is the lie
 decision 4 forbids. The distinction was always container-vs-claim, and only the claim was

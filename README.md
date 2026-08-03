@@ -46,15 +46,13 @@ All singletons, referenced by path.
 | **Product** | `product/business-context.md`, `personas/{slug}.md`, `design-principles.md`, `glossary.md` |
 | **Technical** | `technical/target-architecture.md`, `integration-map.md`, `api-and-interface-standards.md`, `coding-standards.md`, `testing-standards.md`, `nfr.md` |
 | **Process & governance** | `process/ways-of-working.md`, `definition-of-done.md`, `review-and-release.md`; `governance/data-handling.md`, `access-control.md`, `compliance.md`, `ai-policy.md`; `capabilities/skill-governance.md` |
-| **Shared workflows** | `process/workflows/` — e.g. `refinement.md`, `incident-response.md` |
 
-### Domain — in `<domain>/` inside the Hub (specific to that thing/team)
+### Domain — in `domains/<domain>/` inside the Hub (specific to that thing/team)
 
 | Kind | Files |
 |---|---|
 | **Technical singletons** (path-referenced) | `technical/repo-overview.md`, `system-behavior.md`, `runtime-architecture.md`, `legacy-notes.md`, `local-conventions.md` |
 | **PM discovery artifacts** (many instances, ID'd) | `product/opportunity-solution-tree/` (outcomes, opportunities, solutions, assumptions) and `product/iterations/` (interviews, stories, epics, story maps, decisions) |
-| **This team's workflow** | `process/workflows/backlog.md` — a pointer to the team's Jira/Linear |
 | **Staging** | `staging/candidates/` — where ingestion drops undecided material |
 
 A domain folder uses the **same layout as the Hub root**, so a path means the same thing at
@@ -167,6 +165,9 @@ down. That end-to-end run is the next milestone, pending a real recording.
 
 ## Where the detail lives
 
+- [how-it-works.md](docs/how-it-works.md) — **start here for the picture.** Two diagrams: the
+  lifecycle (setup → conversation → checkpoint → staging → promotion → canonical) and the
+  shape context lives in.
 - [vocabulary.md](docs/vocabulary.md) — the locked type system. The authoritative schema.
 - [file-taxonomy.md](docs/file-taxonomy.md) — where each piece of context lives; the full manifest.
 - [board-sidecars.md](docs/board-sidecars.md) — optional visual-board attachments.

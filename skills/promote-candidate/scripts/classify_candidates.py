@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """Classify staging candidates by what promotion actually means for each, batched by target.
 
-Promotion is not one verb. Reading the ten candidates ingestion produced, they need five
+Promotion is not one verb. Reading the ten candidates ingestion produced, they need four
 different outcomes -- and only one of them is anything like "move the file":
 
   MERGE       the claim lands in a section of an existing context file
   CONTRADICTS the target says the opposite; a human decides which one moves. NEVER auto-apply
-  HANDOVER    target is a Workflow -> the item belongs in Jira/Linear. The mesh does not file
   NO-HOME     target_path is null; nothing to promote into until the manifest grows a file
   NEVER       provenance roots (Conversation) stay in staging forever, by definition
+
+A fifth verb, HANDOVER, existed through v2.1: the target was a Workflow, so the item belonged
+in Jira/Linear and the mesh handed it over rather than filing it. The workflow layer is
+deferred as of v2.2; the design is retained privately.
 
 Batched by target file: three candidates landing in one document are one edit, reviewed
 whole, not three sequential passes that conflict with each other.
@@ -92,11 +95,6 @@ def classify(fm, body):
                                "moves -- the doc or the world it describes. NEVER auto-apply: "
                                "a contradicts edge is never auto-resolved (vocabulary.md).")
 
-    if any(e.get("edge") == "routed-to" for e in edges) or "workflows/" in target:
-        return "HANDOVER", ("Target is a Workflow, not a file. The backlog lives in the "
-                            "external system the workflow names -- the mesh knows where work "
-                            "goes, it is not where work goes. Hand it over; a human files it.")
-
     if target.startswith("staging/") or "/staging/" in target:
         return "NO-HOME", ("Target is inside staging -- that is output, not canonical context. "
                            "This candidate has no canonical destination.")
@@ -131,11 +129,12 @@ def collect(cand_dir, rows, domain_label):
         fm = parse_frontmatter(text)
         if not fm:
             continue
-        # Anything not still in staging has already been promoted -- `canonical` (merged into
-        # a context file) or `resolved` (handed over to an external tracker). Re-offering one
-        # means merging the same claim twice, which is exactly the accretion dedup exists to
-        # prevent. Skip on "not staging" rather than listing the done states: a state added
-        # later should default to safe.
+        # Anything not still in staging has already been promoted -- `canonical`, i.e.
+        # merged into a context file. Re-offering one means merging the same claim twice,
+        # which is exactly the accretion dedup exists to prevent. Skip on "not staging"
+        # rather than listing the done states: a state added later should default to safe.
+        # (That defaulting is why a pre-v2.2 `resolved` candidate is still skipped
+        # correctly, rather than being re-offered once the state left the vocabulary.)
         state = fm.get("state", "staging")
         if state != "staging":
             continue

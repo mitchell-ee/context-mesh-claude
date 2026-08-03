@@ -21,7 +21,6 @@ Six outcomes. `scripts/classify_candidates.py <hub-root>` decides which:
 |---|---|
 | **MERGE** | The claim lands in a section of the target file. The only one that resembles "moving" it. |
 | **CONTRADICTS** | The target says the opposite. **A human decides which moves — the doc, or the world.** Never auto-apply. |
-| **HANDOVER** | Target is a `Workflow` → the item belongs in Jira/Linear. Hand it over; **the mesh does not file.** |
 | **RESOLVE** | An `OpenQuestion` doesn't promote — it *resolves* into another type first. |
 | **NO-HOME** | `target: null`. Nothing to promote into until the manifest grows a file. |
 | **NEVER** | A `Conversation` is a provenance root. It stays in staging permanently. |
@@ -86,34 +85,13 @@ stage 3.5 and flagged it precisely so a human would see it.
 
 Those have completely different consequences. A doc that's wrong gets edited. A *world*
 that's wrong — code doing something the doc says it shouldn't — is a bug, and the fix is a
-`Todo`, not a doc edit. Run 1's `rf-0003` is exactly this: `system-behavior.md` says
+a fix in the team's tracker, not a doc edit. Run 1's `rf-0003` is exactly this:
+`system-behavior.md` says
 `payment.failed` publishes on decline; the conversation established the service publishes too
 early. The doc describes the intent, the code has a bug. **Merging the candidate would have
 quietly rewritten the intent to match the bug.**
 
 Only after a human decides does anything move.
-
-## HANDOVER — the mesh doesn't file
-
-The target is a `Workflow`, which is a **pointer to the system that really runs the process**
-(Jira, Linear). There is no file to merge into.
-
-Produce a ready-to-file item and **hand it over**:
-
-- **Title and body** — what to file.
-- **Destination** — from the workflow's `system` + `external_ref`. e.g. Jira project `PAY`.
-- **Provenance** — the conversation it came from, and the `references` edges (an OST ID makes
-  it traceable work, not a loose chore).
-
-Then **stop**. Filing is an outward-facing write to a system the mesh doesn't own and can't
-undo — wrong `source_kind` costs a stale pointer; a wrongly-filed ticket is in someone's
-sprint. A human files it.
-
-**The candidate is kept**, marked `state: resolved`, with `resolved_to: <ticket ref>` once the
-human says it's filed. Not deleted: it carries the `derives-from` chain back to the
-conversation — what was said, who raised it, which meeting. **Jira cannot hold that**, and
-that provenance is what this project exists to preserve. The ticket is the work; the candidate
-is the record of where the work came from.
 
 ## RESOLVE — an OpenQuestion isn't ready
 

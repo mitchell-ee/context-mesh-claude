@@ -2,7 +2,7 @@
 # For a Conversation node (the provenance root), use the block at the bottom of this file
 # instead — it carries the v1.1 source-reference properties.
 id: <chunk-id>                        # e.g. k-0001
-type: <Knowledge|Requirement|Todo|DomainFact|OpenQuestion>
+type: <Knowledge|Requirement|DomainFact|OpenQuestion>
 tag: <decided|undecided>
 state: staging                        # always. Nothing ingestion writes is canonical.
 target: <eventual/canonical/path.md>  # or: null, with a no-home note in the body
@@ -10,7 +10,7 @@ confidence: <high|medium|low>
 edges:
   - edge: derives-from                # mandatory on every Group-A node
     target: <conversation-id>
-  - edge: <applies-to|references|routed-to|triggers|creates|contradicts>
+  - edge: <applies-to|references|contradicts>
     target: <domain-name | domain:ID-NNNN | hub-relative path>
 ---
 

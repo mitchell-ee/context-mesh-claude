@@ -23,8 +23,9 @@ promotion into it is a separate human act, and *that* is where the PR gate lives
 - **Where the transcript came from** — **inferred from the input**, then confirmed (stage 1a).
   Not configured; it decides whether the raw material survives the run.
 
-**If the Hub or a domain isn't set up** — no `context-index.md`, or no workflow so `Todo`s
-can't route — that is the **`setup-mesh` skill's** job, not this one. Check with
+**If the Hub or a domain isn't set up** — no `context-index.md`, or an index that lists
+nothing, so a fact has nowhere to land — that is the **`setup-mesh` skill's** job, not this
+one. Check with
 `python3 "${CLAUDE_PLUGIN_ROOT}/skills/setup-mesh/scripts/check_setup.py" <dir>`. Ingestion assumes a mesh that is ready
 to receive; it reports gaps, it does not fix them mid-run.
 
@@ -159,9 +160,17 @@ the vocabulary:
 |---|---|
 | `Knowledge` | A durable fact about the product, users, or system. |
 | `Requirement` | A capability or constraint someone wants built. |
-| `Todo` | An action item someone has to do. |
 | `DomainFact` | A fact specific to one domain — its code, quirks, conventions. |
 | `OpenQuestion` | A point raised and left undecided. Needs a human decision. |
+
+**Action items are out of scope — do not type them.** "Chase the DPA", "book the workshop",
+"file a ticket for X" are *the work*, not context about it. The mesh supports context; where
+work gets queued is the team's tracker's job, and every team's is different. There was a
+`Todo` type through v2.1; it is deferred, and the design is retained privately.
+
+**Report them, don't drop them silently.** List the action items the transcript contained in
+the run summary, so the human can put them wherever they actually track work. Noticing one is
+useful; filing it is not this system's job.
 
 **Chunk granularity — the default:** one chunk = **one durable claim**, with enough context
 to stand alone once the conversation is gone. Err coarse. A chunk a reader can't understand
@@ -191,8 +200,7 @@ alone, frontmatter. Write it as context, not as a transcript excerpt. No "Mike s
 |---|---|
 | `Conversation` | `references` |
 | `Knowledge` | `derives-from`, `applies-to`, `references`, `contradicts` |
-| `Requirement` | `derives-from`, `triggers`, `creates`, `references`, `contradicts` |
-| `Todo` | `derives-from`, `routed-to`, `references` |
+| `Requirement` | `derives-from`, `references`, `contradicts` |
 | `DomainFact` | `derives-from`, `applies-to`, `references`, `contradicts` |
 | `OpenQuestion` | `derives-from`, `references` |
 
@@ -207,21 +215,15 @@ index actually lists. **Never invent one.**
 the fact is about (is this about one domain, or about everybody? — the latter goes to the Hub
 root) and the file by the index's load conditions.
 
-**A `Todo` routes to a workflow, not a file.** The index lists the domain's workflows
-(`process/workflows/`) — usually **pointers to the system that really runs the process**
-(Jira, Linear). Route the `Todo` there with `routed-to`; its `target_path` is its own staging
-candidate, because a `Todo` has no canonical file to land in — the real destination is the
-tracker.
-
-Routing a `Todo` means **identified and attributed, not filed.** Filing is a human act in the
-external system. Never write a list of todos into the mesh: that makes it a shadow issue
-tracker with a second source of truth, rotting from the day it is written.
-
 **No good home is a legal answer.** If the index shows no file this belongs in, say so:
 `target_path: null`, with a note on what file would need to exist. A mesh with a gap is
 normal. Forcing a chunk into the nearest surviving file is how a taxonomy rots — and the gap
-is a finding the client needs. (If a `Todo` has nowhere to go, the index declares **no
-workflow** — that is the gap to report.)
+is a finding the client needs.
+
+**Check the "Not in this mesh" section before reporting a gap.** A file named there is
+*deliberately* absent, so `target_path: null` is the correct and final answer — not a
+manifest gap someone should fix. A file that is missing but *not* named there may simply not
+be written yet.
 
 **Confidence + rationale** — high / medium / low, plus one line of why, so the human can skim
 the confident ones and scrutinize the rest. Low confidence is useful; false confidence is

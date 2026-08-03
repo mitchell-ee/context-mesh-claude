@@ -5,6 +5,13 @@
 > The rationale stands; the multi-repo specifics do not. All context now lives in the AI Hub in
 > domain folders — `RepoFact` is `DomainFact`, and `mirrored-to`/`mirrored-from` no longer exist.
 > See the [single-Hub collapse](vocabulary.md#v20-2026-07-21--the-single-hub-collapse).
+>
+> **Also superseded (v2.2, 2026-08-03):** the starter vocabulary below includes `Todo` and the
+> edges `triggers` / `creates`, all of which are **deferred out of the schema** — the mesh
+> holds context, not work. The design is retained privately
+> and may return as a future feature. Domains now live under
+> `domains/`.
+>
 > **Superseded on specifics by [vocabulary.md](vocabulary.md).**
 
 
@@ -93,7 +100,7 @@ goal worth pursuing — same node/edge vocabulary, same storage substrate.
 > navigation. **IDs are reserved for artifact types with many siblings** that must be
 > tracked and differentiated — the board-object family (outcomes, opportunities,
 > solutions, activities, epics, stories), as in the aiviz project. One-off singletons
-> (canonical product/technical context) are referenced by path, not ID. See `CLAUDE.md`.
+> (canonical product/technical context) are referenced by path, not ID.
 
 "Knowledge graph" must **not** pull us toward heavyweight tooling (triple stores,
 RDF/OWL, Neo4j) before it's needed. The harness-agnostic stance and the observed

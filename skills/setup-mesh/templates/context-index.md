@@ -25,20 +25,17 @@ decide that. A file not listed here is invisible to routing.
 Every entry needs **what it's about** and **when to load it**. The load condition is what
 routing actually matches against — vague conditions produce vague routing.
 
+> **The path must be a markdown link** — `[technical/repo-overview.md](technical/repo-overview.md)`,
+> not `` `technical/repo-overview.md` ``. Paths are extracted with a link regex, so a
+> backticked or plain-text row is **invisible**: it is never checked, and routing cannot see
+> the file. An index written entirely in backticks parses to zero files while looking
+> complete, and the setup check has no way to tell that from an empty mesh.
+
 | File | About | Load when |
 |---|---|---|
 | [technical/repo-overview.md](technical/repo-overview.md) | <what this domain is, its place in the system, its boundaries> | <orienting here; deciding whether a change belongs> |
 | [technical/system-behavior.md](technical/system-behavior.md) | <what it does at runtime: flows, orchestration> | <reasoning about runtime behavior or changing a flow> |
 | … | … | … |
-
-## Workflows (routable processes)
-
-Where an action item or a requirement goes. Most are **pointers to the system that really
-runs the process** — the file names it and says where it lives.
-
-| File | Process | Runs in | Route here when |
-|---|---|---|---|
-| [process/workflows/backlog.md](process/workflows/backlog.md) | `backlog` | <Jira (`KEY`)> | An action item needs queueing for this team. Routing = identified and attributed, **not filed**. |
 
 ## Discovery artifacts
 
@@ -56,6 +53,22 @@ team does not run discovery" tells routing there are no IDs to reference here.>
 
 ## Not in this mesh
 
-<Optional but valuable: list what's deliberately absent. A chunk whose only home would be one
-of these has **no home** — and routing should say so rather than pick the nearest survivor.
-Naming the gaps makes that honest instead of accidental.>
+Optional but valuable: what is **deliberately** absent. A chunk whose only home would be one
+of these has **no home**, and routing should say so rather than pick the nearest survivor.
+Naming the gaps makes that honest instead of accidental.
+
+> **Format: one bullet per gap, filename backticked, never markdown-linked.** A link here
+> would be read as a context file that is listed but missing — the opposite of what this
+> section means. The two rules pull in opposite directions on purpose: a *real* row must be
+> a link, a *deliberate gap* must not be.
+
+- `<path/to/file.md>` — <why it is absent, and where that context lives instead>
+- `<path/to/folder/>` — <same>
+
+<!-- Three states share filename-shaped syntax and are NOT the same thing:
+       deliberate gap  — this section, backticked: the file should never exist here
+       pending home    — a row in Canonical context: a declared home, not written yet
+       broken link     — a row in Canonical context whose file is gone: a real error
+     Only the first belongs in this section. -->
+
+<Say **"None."** if nothing is deliberately excluded — an absent section is ambiguous.>

@@ -1,20 +1,23 @@
 ---
 name: setup-mesh
-description: Set up the AI Hub and its domain folders to receive ingested context — survey which domains are ready, scaffold the containers they need, find or declare each context-index, and configure where to-dos go (the backlog workflow). Use when preparing the Hub for ingestion, adding a domain, when a Todo has nowhere to route, or when asked to set up / configure / onboard for context-mesh.
+description: Set up the AI Hub and its domain folders to receive ingested context — survey which domains are ready, scaffold the containers they need, and find or declare each context-index. Use when preparing the Hub for ingestion, adding a domain, or when asked to set up / configure / onboard for context-mesh.
 ---
 
 # Set up the Hub and its domains for ingestion
 
 **All context lives in the AI Hub — one repo.** Context about one thing lives in that thing's
-**domain folder** inside the Hub; code repos hold no context and are unaware of the mesh.
+**domain folder under `domains/`**; code repos hold no context and are unaware of the mesh.
 
-Runs **once, then again to add a domain** — not per transcript. Two jobs:
+Runs **once, then again to add a domain** — not per transcript. One job:
 
-1. **The index** — find `context-index.md`, or declare one from what already exists.
-2. **The workflow config** — where do to-dos go? Write the pointer, declare it in the index.
+**The index** — find `context-index.md`, or declare one from what already exists.
 
-Both are **committed** — they're properties of the domain and its team, the same for whoever
-ingests.
+It is **committed** — a property of the domain and its team, the same for whoever ingests.
+
+> **This skill had a second job until v2.2**: configuring where to-dos go (the backlog
+> workflow pointer). The workflow layer is deferred — the mesh holds context, and a queue is
+> the work itself. The design is retained privately
+> and may return as a future feature.
 
 **There is no separate scaffolding command.** Adding a domain is **this same skill run again**;
 it is idempotent, so there is no separate "add" mode
@@ -45,13 +48,17 @@ splits what's missing into the only two categories that matter:
 | | What it is | Who fixes it |
 |---|---|---|
 | **scaffold creates** | containers — directories, an empty index | the script, unattended |
-| **needs a human** | claims — what a file is about, when to load it, where work queues | the team |
+| **needs a human** | claims — what a file is about, when to load it | the team |
 
 **`scaffold_domain.py` creates containers and never a claim.** Directories
-(`staging/candidates/`, `process/workflows/`) and a stub `context-index.md` **with no
-entries**. It will never create `technical/repo-overview.md`, and never add a row to the
-index. The Hub root gets no `process/workflows/` — it has no team backlog by design, since
-`Todo`s route to the domain that owns the work.
+(`staging/candidates/`) and a stub `context-index.md` **with no entries**. It will never
+create `technical/repo-overview.md`, and never add a row to the index.
+
+**A domain is created at `domains/<name>/`, and a domain is nothing else.** There is no
+detection heuristic: anything under `domains/` is a domain, anything outside it isn't,
+whatever it is named or contains. (Before v2.2 domains sat at the Hub root and had to be
+detected, which reported a `docs/product/` research folder as a domain while missing the real
+one.)
 
 **It is idempotent.** A re-run changes nothing and says so. That is what makes "run it again to
 add a domain" the add path — and it's why a re-run **opens no PR**: there is no diff.
@@ -95,7 +102,7 @@ and per transcript — one company runs Granola and Otter and Zoom at once. That
 setup config, and a saved default would be a hint the skill has to second-guess. Ingestion infers
 the source from the actual input at stage 1 and confirms it. No config file.
 
-## Job 1 — The index
+## The index
 
 ### If `context-index.md` exists
 
@@ -106,7 +113,10 @@ Read it and check it against reality:
 - **Present but unlisted** — a context file exists that the index doesn't name. Ingestion
   can't route to it, because routing reads the index only. **Offer to add it** — ask what it's
   about and when to load it; don't invent those.
-- **No workflows section** — go to job 2.
+- **Lists nothing at all** — a real state worth naming. Routing reads the index and only the
+  index, so an index with no rows can receive nothing. Usually the rows are there but aren't
+  **markdown links** (backticked or plain-text paths parse to nothing), so check the format
+  before concluding the mesh is empty.
 
 ### If there is no `context-index.md`
 
@@ -123,55 +133,32 @@ about what the default manifest says it's about. It's their domain.
 
 Write `context-index.md` following [templates/context-index.md](templates/context-index.md).
 
-## Job 2 — The workflow config (where to-dos go)
+### Two format rules the index must follow
 
-**This is the job with no path today.** Without it, every action item ingestion finds is
-unroutable: a `Todo` may only be `routed-to` a `Workflow`, and a domain with no declared
-workflow has no legal target. Run 1 of ingestion produced two `Todo`s and could place
-neither — at *high* confidence, because the agent knew exactly what it wanted and found
-nothing there.
+Both exist because breaking them is silent — the index looks right and the tooling reads
+something different.
 
-Ask one question:
+**1. A context-file row's path must be a markdown link.** `[technical/system-behavior.md](technical/system-behavior.md)`,
+not `` `technical/system-behavior.md` ``. The checker extracts paths with a link regex, so a
+backticked or plain-text row is invisible: it does not get checked, and routing cannot see the
+file. An index written entirely in backticks parses to **zero** files while looking complete.
 
-> **Where does this team's work get queued?** (Jira project, Linear team, GitHub issues, …)
+**2. A file named under "Not in this mesh" must NOT be a markdown link.** That section names
+files that *should not exist*, so linking one makes it read as a context file that is listed
+and missing. Backtick them, one bullet each, with the reason:
 
-Then write `process/workflows/backlog.md` from
-[templates/workflow.md](templates/workflow.md), with `system` and `external_ref` pointing at
-the real thing, and declare it in the index's Workflows section.
+```markdown
+- `governance/data-handling.md` — the platform team owns this; not duplicated here
+- `product/personas/` — personas are cross-cutting; see the Hub root
+```
 
-**The workflow file is a pointer, not a container.** The backlog lives in Jira; this file
-names it and says where. A `Todo` routed here is **identified and attributed, not filed** —
-filing is a human act in the real system. See
-[file-taxonomy.md](../../docs/file-taxonomy.md#workflows--where-a-routable-process-lives-added-2026-07-16).
+**Three states share filename-shaped syntax and mean different things.** Keep them apart:
 
-**Never create a second source of truth for work.** A list in the mesh that duplicates a queue
-some other system already owns rots from the day it's written. The mesh's job is to know
-*where* work goes, not to *be* where work goes.
-
-**The queue may be a file in this repo** (revised 2026-07-30, vocabulary v2.1). `system: repo`
-with an `external_ref` naming a repo-relative path is a first-class, correct workflow — a
-repo-native backlog that *is* the record of work duplicates nothing. Earlier versions of this
-skill blocked any checkbox list on sight; that test was wrong in both directions, blocking
-legitimate in-repo queues while passing a real shadow copy written without checkboxes.
-
-What is actually checked:
-
-| Condition | Verdict |
-|---|---|
-| No `system:` **and** no `external_ref:` | **BLOCKED** — nothing owns this queue |
-| `external_ref` naming a path that **doesn't exist** | **BLOCKED** — points at nothing |
-| `system: repo` + a path that resolves | **Fine** — checkbox list or not |
-| `system:` but no `external_ref` | **Note** — legal for a ritual, incomplete for a queue |
-
-**Say what the queue creates.** Add `creates: Story` or `creates: Task` so a routed `Todo`
-becomes the right kind of artifact rather than an untyped line. A dev backlog and a
-project-task list are different queues and a mesh may hold both.
-
-### Other workflows
-
-`backlog` is the one ingestion needs. A domain may declare others (`triage`, `refinement`) —
-same shape, same pointer rule. Cross-team processes belong in the **Hub root's** index
-instead; the index that lists a workflow declares who owns it.
+| State | Where it goes | Means |
+|---|---|---|
+| **Deliberate gap** | *Not in this mesh*, backticked | This file should never exist here |
+| **Pending home** | a context-table row, linked | Declared home; not written yet |
+| **Broken link** | a context-table row, linked | Was real, now missing — a genuine error |
 
 ## Verify
 
@@ -195,15 +182,15 @@ asking would couple the mesh to a vendor.
 
 Exit 0 = ingestion can run. Exit 1 = it can't, or would misroute.
 
-**Blocked** means genuinely broken: no index, or the index lists files that don't exist
-(facts would route into a vacuum), or a workflow that declares no owning system, or one whose
-`external_ref` points at a path that doesn't exist.
+**Blocked** means genuinely broken: no index, or the index lists files that don't exist —
+facts would route into a vacuum.
 
-**A missing workflow is a note, not a blocker** — `Knowledge` and `DomainFact` route fine
-without one; only `Todo`s can't. That's a real consequence worth stating, but it isn't
-broken: the **Hub root** has no team backlog by design (to-dos route to the domain that owns
-the work), and a team may genuinely have no tracker. A check that nags every domain for
-differing from the most-configured one gets ignored, and then it catches nothing.
+**An index that lists nothing is a note, not a blocker.** `scaffold_domain.py` deliberately
+writes an empty index (a container, never a claim), so calling its own output broken would
+make the two scripts contradict each other. But the verdict says so out loud rather than
+reporting a bare READY: *"READY to run — but nothing to route to."* A plain "what it lists is
+real" is vacuously true of an empty list, and that phrasing is exactly how this went
+unreported before.
 
 ## When you're done
 
@@ -212,4 +199,5 @@ Say plainly:
 - What was declared, and what was already there.
 - **Which context files are missing** relative to the default manifest — as a *list for the
   humans*, not a to-do for the skill. Ingestion will report gaps honestly when it hits them.
-- Whether a `Todo` can now route.
+- Whether the index actually lists anything yet — a scaffolded stub is set up but cannot
+  receive a fact until someone fills it in.

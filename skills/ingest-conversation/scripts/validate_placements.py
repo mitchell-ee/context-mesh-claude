@@ -22,8 +22,7 @@ LEGAL_EDGES = {
     # Group A -- ingestion types
     "Conversation": {"references"},
     "Knowledge": {"derives-from", "applies-to", "references", "contradicts"},
-    "Requirement": {"derives-from", "triggers", "creates", "references", "contradicts"},
-    "Todo": {"derives-from", "routed-to", "references"},
+    "Requirement": {"derives-from", "references", "contradicts"},
     "DomainFact": {"derives-from", "applies-to", "references", "contradicts"},
     "OpenQuestion": {"derives-from", "references"},
     # Group B -- discovery & work artifacts
@@ -33,20 +32,22 @@ LEGAL_EDGES = {
     "Assumption": {"references", "rendered-on"},
     "Story": {"parent-of", "references", "rendered-on"},
     "Epic": {"parent-of", "rendered-on"},
-    # v2.1: work with no discovery lineage. No parent-of -- that absence IS the type.
-    "Task": {"references", "routed-to", "rendered-on"},
     "Interview": {"references"},
     # Group C -- canonical context & structural
     "ContextFile": {"applies-to", "references", "loaded-by", "owned-by"},
     "Persona": {"applies-to", "references"},
     "Architecture": {"applies-to", "references"},
-    "Workflow": {"creates"},
     "Domain": {"owned-by"},
     "Board": set(),  # terminal -- only ever a rendered-on target
 }
 
+# v2.2: `Todo`, `Task`, and `Workflow` were removed along with the edges `routed-to`,
+# `triggers`, and `creates`. The mesh holds context; a queue is the work itself. An
+# ingested action item is now reported as out of scope rather than typed and routed.
+# The full design is retained privately and may return as a future feature.
+
 # Group A nodes must carry derives-from: provenance is mandatory (vocabulary.md).
-GROUP_A = {"Conversation", "Knowledge", "Requirement", "Todo", "DomainFact", "OpenQuestion"}
+GROUP_A = {"Conversation", "Knowledge", "Requirement", "DomainFact", "OpenQuestion"}
 
 # Conversation is the provenance root -- it is what others derive FROM.
 PROVENANCE_EXEMPT = {"Conversation"}
@@ -58,9 +59,10 @@ VALID_TAGS = {"decided", "undecided"}
 # node the agent wrote about a source nobody can check.
 VALID_SOURCE_KINDS = {"referenced", "archived", "ephemeral"}
 
-# 4-digit zero-padded, domain-prefixed: payments:OPP-0042 (file-taxonomy.md)
+# 4-digit zero-padded, domain-prefixed: payments:OPP-0042 (file-taxonomy.md).
+# 0000 is in range -- it conventionally means "precedes everything".
 ID_PATTERN = re.compile(
-    r"^[a-z0-9][a-z0-9-]*:(OUTCOME|OPP|SOL|ASSUMPTION|STORY|EPIC|TASK)-\d{4}$"
+    r"^[a-z0-9][a-z0-9-]*:(OUTCOME|OPP|SOL|ASSUMPTION|STORY|EPIC)-\d{4}$"
 )
 
 

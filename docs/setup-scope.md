@@ -1,11 +1,17 @@
 # context-mesh — what setup builds
 
 Status: design note. Written 2026-07-21; **rewritten the same day by the
-[single-Hub collapse](vocabulary.md#v20-2026-07-21--the-single-hub-collapse).**
+[single-Hub collapse](vocabulary.md#v20-2026-07-21--the-single-hub-collapse)**; updated
+2026-08-03 for vocabulary v2.2.
 
 The original version scoped setup as "run over a set of ~100 repos." **There is one repo.**
 Setup now stands up the Hub and carves it into domain folders. This document records what
 survived that change and what it deleted.
+
+> **Two v2.2 changes (2026-08-03).** Domain folders live at **`domains/<name>/`**, so nothing
+> has to detect which directories are domains. And setup's **second job is gone** — it used to
+> declare the workflow that to-dos route to, which went with the workflow layer
+> (deferred; the design is retained privately). Setup is the index job now.
 
 ---
 
@@ -20,8 +26,8 @@ add mode.
    input. A human names them. Adding a domain later means **running setup again** — the same
    command, not a separate path.
 3. **Per named domain,** create the directory skeleton and a domain `context-index.md`.
-4. **Report the aggregate** — which domains are ready, which need a human decision (no index
-   entries, no workflow declared).
+4. **Report the aggregate** — which domains are ready, which need a human decision (an index
+   with no entries can receive nothing, even though it is not broken).
 
 **Idempotence is the load-bearing property.** It is what makes "run it again to add a domain"
 safe rather than a second code path. A run naming five domains where four are already

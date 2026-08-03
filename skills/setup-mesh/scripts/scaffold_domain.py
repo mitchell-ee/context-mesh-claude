@@ -14,17 +14,17 @@ A claim is a context file the index lists. `business-context.md` existing and sa
 is a LIE THE SKILL BELIEVES: routing reads the index, so ingestion would land a fact in a
 stub at high confidence. That is build-scope decision 4, and it survives unchanged.
 
-So: this script will create `staging/candidates/`, `process/workflows/`, and a stub
-`context-index.md` with NO entries. It will never create `technical/repo-overview.md`, and
-it will never add a row to the index's context table.
+So: this script will create `staging/candidates/` and a stub `context-index.md` with NO
+entries. It will never create `technical/repo-overview.md`, and it will never add a row to
+the index's context table.
 
 IDEMPOTENT. A second run does nothing and reports nothing changed. That is what makes "run
 setup again to add a domain" the add path rather than a second mode -- and it is why a re-run
 produces no PR: there is no diff.
 
-All context lives in the Hub. A domain is a FOLDER inside it, not a separate repo, so the
-only structural distinction is root-vs-domain: the root holds cross-cutting context and has
-no team backlog (`Todo`s route to the domain that owns the work).
+All context lives in the Hub. A domain is a FOLDER under `domains/`, not a separate repo
+(v2.2), so the only structural distinction is root-vs-domain: which index template is
+written, and where the folder goes.
 
 Usage:
     scaffold_domain.py <hub-root>                      # stand up the Hub root
@@ -38,15 +38,17 @@ import os
 import sys
 
 INDEX = "context-index.md"
+DOMAINS_DIR = "domains"
 
-# Directories every domain has. Empty ones are honest: nothing routes to a dir.
-DOMAIN_DIRS = [
-    os.path.join("staging", "candidates"),
-    os.path.join("process", "workflows"),
-]
-
-# The root has no team backlog by design: Todos route to the domain that owns the work.
+# Directories every container gets. Empty ones are honest: nothing routes to a dir.
+#
+# The root and a domain took different lists until v2.2, because a domain also got
+# `process/workflows/` and the root deliberately did not. With the workflow layer deferred
+# the two are identical, and survey_mesh.py imports this rather than restating it -- the
+# survey once hardcoded its own copy and promised a directory this script would not create
+# (Minotaur finding 5).
 ROOT_DIRS = [os.path.join("staging", "candidates")]
+DOMAIN_DIRS = [os.path.join("staging", "candidates")]
 
 DOMAIN_INDEX = """# {name} — context index
 
@@ -75,20 +77,21 @@ to decide that. A file not listed here is invisible to routing.
        - **Load when** — the progressive-disclosure condition routing matches against
 
      Add a row only when the file it names actually exists and says something. A row
-     pointing at a stub is worse than no row: routing would send facts there. -->
+     pointing at a stub is worse than no row: routing would send facts there.
+
+     EVERY PATH MUST BE A MARKDOWN LINK. The checker extracts paths with a link regex,
+     so a backticked or plain-text path is invisible to it and to routing. A row is:
+
+       | [LABEL](PATH.md) | what the file covers | when to load it |
+
+     where LABEL and PATH are both the file's path, e.g. technical/system-behavior.md.
+
+     The shape is spelled out rather than shown filled in, deliberately: the regex does
+     not know it is reading a comment, so a realistic example row here would be parsed
+     as a real entry and reported as a file that is listed but missing. -->
 
 | File | About | Load when |
 |---|---|---|
-
-## Workflows (routable processes)
-
-<!-- SCAFFOLD: none declared. Until there is one, `Todo`s cannot route anywhere —
-     a Todo may only be `routed-to` a Workflow. Knowledge and facts route fine.
-
-     Run setup-mesh job 2 to declare where this team queues work. -->
-
-| File | Process | Runs in | Route here when |
-|---|---|---|---|
 
 ## Discovery artifacts
 
@@ -105,13 +108,22 @@ to decide that. A file not listed here is invisible to routing.
 ## Not in this mesh
 
 <!-- SCAFFOLD: unanswered, and worth answering. Listing what is deliberately absent is
-     what lets routing say "no home" honestly instead of picking the nearest survivor. -->
+     what lets routing say "no home" honestly instead of picking the nearest survivor.
+
+     FORMAT — one bullet per gap, and DO NOT markdown-link the filename. A link here
+     would be read as a context file that is listed but missing. Backticks, deliberately:
+
+       - `technical/api-contract.md` — this domain exposes no public API
+       - `product/personas/` — personas are cross-cutting; see the Hub root
+
+     A deliberate gap ("should never exist here"), a pending home ("not written yet"), and
+     a broken link ("was deleted") are three different states. Only the first goes here. -->
 """
 
 ROOT_INDEX = """# AI Hub — context index
 
 The single repo holding all context. Cross-cutting context (shared by every team) lives at
-this root; everything specific to one thing lives in its **domain folder** alongside.
+this root; everything specific to one thing lives in its **domain folder under `domains/`**.
 
 **This file is the manifest, the routing input, and the progressive-disclosure contract.**
 Read it first; load only what the current task needs. Do not load the whole mesh.
@@ -132,7 +144,10 @@ Read it first; load only what the current task needs. Do not load the whole mesh
 
 <!-- SCAFFOLD: no domains yet. This list is the one piece of mesh-wide manifest that is
      not a file list: which domains exist is a per-engagement decision (one per code repo,
-     one per business domain, or a mix). Add a row per domain folder. -->
+     one per business domain, or a mix). Add a row per folder under `domains/`.
+
+     A domain is exactly a directory under `domains/` — nothing else is one, whatever it
+     contains or is named. -->
 
 | Domain | About | Owned by |
 |---|---|---|
@@ -144,7 +159,10 @@ Read it first; load only what the current task needs. Do not load the whole mesh
 
      This root holds context that governs everybody (personas, target architecture, coding
      standards). Context about one domain belongs in that domain's folder, not here. Add a
-     row only when the file exists and says something. -->
+     row only when the file exists and says something.
+
+     EVERY PATH MUST BE A MARKDOWN LINK — see the note in a domain index. A backticked or
+     plain-text path is invisible to the checker and to routing. -->
 
 | File | About | Load when |
 |---|---|---|
@@ -158,7 +176,18 @@ Read it first; load only what the current task needs. Do not load the whole mesh
 ## Not in this mesh
 
 <!-- SCAFFOLD: unanswered. Naming the deliberate gaps is what lets routing report
-     "no home in this mesh" instead of routing to the closest surviving file. -->
+     "no home in this mesh" instead of routing to the closest surviving file.
+
+     FORMAT — one bullet per gap, and DO NOT markdown-link the filename. A link here
+     would be read as a context file that is listed but missing. Backticks, deliberately:
+
+       - `governance/data-handling.md` — handled by the platform team's own repo, not here
+       - `product/pricing.md` — no pricing context in this mesh; ask the commercial team
+
+     Three states share the filename-shaped syntax and mean different things: a deliberate
+     gap (this section — the file should never exist here), a pending home (a row in the
+     context table whose file has not been written yet), and a broken link (a row whose
+     file was deleted). Only the first belongs here. -->
 """
 
 
@@ -218,7 +247,10 @@ def main():
         if os.sep in d or d in (".", ".."):
             print(f"error: domain must be a plain folder name, got: {d}", file=sys.stderr)
             return 2
-        targets.append((os.path.join(hub_root, d), d, False))
+        # Domains live under `domains/`, never at the root beside the cross-cutting
+        # folders (v2.2). The explicit container is what removes the need to detect
+        # domain-ness at all -- see survey_mesh.discover().
+        targets.append((os.path.join(hub_root, DOMAINS_DIR, d), d, False))
 
     any_change = False
     for path, name, is_root in targets:

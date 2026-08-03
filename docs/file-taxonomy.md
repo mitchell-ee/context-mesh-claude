@@ -1,8 +1,10 @@
 # context-mesh — file taxonomy
 
 Status: design note. Written 2026-06-25; reframed 2026-07-16; **restructured 2026-07-21 by the
-[single-Hub collapse](vocabulary.md#v20-2026-07-21--the-single-hub-collapse)**. This is the
-"where does any piece of context live" layout called for in [the README](../README.md).
+[single-Hub collapse](vocabulary.md#v20-2026-07-21--the-single-hub-collapse)**; **updated
+2026-08-03 for vocabulary v2.2** — domains moved under `domains/`, and the workflow layer
+(`Todo`/`Task`/`Workflow`, `process/workflows/`) deferred. This is the
+"where does any piece of context live" layout this project is built around.
 
 **Read the manifest split first** ([below](#the-manifest-split-what-varies-per-implementation)):
 the file *lists* here are a good default, not a specification. They are expected to be
@@ -17,22 +19,32 @@ of the mesh. All Hub content, domain-specific included, is readable by everyone.
 
 ```
 hub/
+  context-index.md    # the root loader
   product/            # cross-cutting, applies to everybody
   technical/
   process/
   governance/
-  <domain>/           # everything about one domain
-    product/
-    technical/
-    process/workflows/
-    staging/
   staging/            # cross-cutting undecided material
+  domains/            # every domain lives here, and nowhere else
+    <domain>/         # everything about one domain
+      context-index.md
+      product/
+      technical/
+      staging/
 ```
 
 A **domain** is a namespace, not necessarily a code repository. It may map 1:1 to one repo, span
 several, or be finer than one. **Which domains exist is manifest** (per-engagement config);
 **that domains exist and own their context exclusively is framework**. See
 [vocabulary.md](vocabulary.md) `Domain`.
+
+**A domain is exactly a directory under `domains/`** (v2.2, 2026-08-03). This is a *declaration
+by location*, not a heuristic: tooling never infers domain-ness from what a folder contains.
+Before v2.2 domains sat beside the cross-cutting folders at the root and had to be detected —
+which misfired in the first third-party run, reporting a `docs/product/` research folder as a
+domain while missing the real one. A folder named `product/` at the root is the cross-cutting
+product tree; a folder named `product/` under `domains/checkout/` is that domain's. Nothing
+else needs deciding.
 
 ## How to read this
 
@@ -46,7 +58,7 @@ Every file sits on two axes, plus two attributes that decide its storage mechani
 - **State** — *Canonical* (decided fact) vs. *Staging* (undecided; awaits promotion).
 - **Cardinality** — *Singleton* (one-off; referenced by **path**) vs. *Multi-sibling*
   (many instances of a type; referenced by **ID** — see [[id-vs-path-references]] /
-  CLAUDE.md). This is what determines whether a thing is a file or a folder-of-files.
+  the path-vs-ID rule). This is what determines whether a thing is a file or a folder-of-files.
 
 Two source models fed this draft, one per side of the cross-cutting/domain split:
 - A real engagement's canonical context list (a legacy-platform migration) — **generalized
@@ -238,121 +250,27 @@ files. Derived views are fine; a stored second copy is not.
 
 ---
 
-## Workflows — where a routable process lives (added 2026-07-16) — *framework, fixed*
+## Workflows — deferred, no longer part of the taxonomy (v2.2, 2026-08-03)
 
-`Workflow` is a node type in [vocabulary.md](vocabulary.md) — "a triggerable process" — and
-until now this document **gave it nowhere to live**. That is a framework hole, not a manifest
-gap: the type system promised a destination the storage layer never provided.
+`process/workflows/` held one file per routable process, and `Todo` routed action items into
+it. **The whole layer is deferred** — the mesh holds context, and a queue is the work rather
+than context about it. Nothing in the mesh stores, types, or routes work items now.
 
-It surfaced through `Todo`, whose only useful edge is `routed-to → Workflow`. Ingestion run 1
-produced two action items and could place neither — **at high confidence**, because the agent
-knew exactly what it wanted and found nothing there. `Requirement → triggers → Workflow` has
-the same hole and simply hasn't been hit yet.
+The complete design — the `Workflow` property table, the pointer-not-container rule, the
+`system: repo` case, `creates`/`via`, the template, and the findings that produced all of it —
+is retained privately and may return as a future feature.
 
-### The rule
-
-A `Workflow` is **one file per process**, declared in the owning index:
-
-| Location | Scope | Examples |
-|---|---|---|
-| `process/workflows/` (Hub root) | Cross-team processes | `refinement.md`, `incident-response.md` |
-| `<domain>/process/workflows/` | This team's processes | `backlog.md`, `triage.md` |
-
-Both are allowed. **The index that lists it declares who owns it** — same rule as everything
-else on the two axes. A team with its own backlog declares one in its domain; a shared
-refinement process is declared at the root. Neither is privileged.
-
-Singletons, **path-referenced** (`payments/process/workflows/backlog.md`), not ID'd —
-there is no traceability chain among workflows and nothing traverses between them. They fall
-on the **manifest** side for *which processes exist* (per-implementation: some teams have a
-triage workflow, some don't) and the **framework** side for *the folder and the pointer
-shape*.
-
-### A `Workflow` may be a pointer to an external system — and usually is
-
-This is the part that matters. A `Workflow` file is **not** a mesh-native copy of the
-process. It **names the process and says where it actually lives**:
-
-```markdown
----
-type: Workflow
-name: backlog
-system: jira
-external_ref: https://acme.atlassian.net/jira/software/projects/PAY
----
-
-# payments-svc — backlog
-
-Where work for this team is queued. **The backlog itself lives in Jira** (`external_ref`);
-this file exists so the graph has a legal `routed-to` target and so an agent knows where to
-send an action item.
-
-Nothing here is a copy of Jira. A `Todo` routed here has been *identified and attributed*,
-not *filed* — filing is a human act in the real system.
-```
-
-**Why a pointer rather than a container:** the mesh's job is to **know where work goes**, not
-to be where work goes. The pointer also keeps `derives-from` provenance intact — the `Todo`
-candidate records what was said, who said it, and which conversation it came from, then points
-at the queue where it belongs. That is strictly better than both "shadow backlog in the mesh"
-and "go type it into Jira yourself, we kept no record."
-
-### The queue may be in this repo (revised 2026-07-30, vocabulary v2.1)
-
-Until v2.1 this section said a markdown backlog is *inherently* a shadow copy, and the
-validators implemented that by **looking for checkbox characters**. That test was wrong in
-both directions: it blocked a repo-native backlog that is legitimately the single record of
-work, and it would have passed a genuine shadow copy written without checkboxes.
-
-**The hazard is a second source of truth, not a syntax.** A file that duplicates a queue some
-other system already owns rots from the day it is written. A file that *is* the record of work
-does not — there is nothing for it to drift against.
-
-So `system: repo` is a first-class value, and `external_ref` may be a repo-relative path:
-
-```markdown
----
-type: Workflow
-name: project-tasks
-system: repo
-external_ref: docs/project-status.md
-creates: Task
----
-```
-
-The three rules that replace the checkbox test:
-
-| Condition | Verdict |
-|---|---|
-| No `system` **and** no `external_ref` | **BLOCKED** — nothing owns this queue. The real smell. |
-| `system: repo` + `external_ref` that **resolves** | **Fine**, checkbox list or not. |
-| `system: repo` + `external_ref` that **dangles** | **BLOCKED** — it points at nothing. |
-
-### `creates` — what the work becomes when it lands
-
-A `Workflow` says where work goes; `creates` says what it turns into there. This is what lets
-one mesh hold several queues that mean different things:
-
-| Workflow | `creates` | What a routed `Todo` becomes |
-|---|---|---|
-| `product-backlog.md` | `Story` | A real story — ID, template, parent `Solution`, backlog entry |
-| `project-tasks.md` | `Task` | Non-dev work with no discovery lineage |
-| `refinement.md` | *(absent)* | Nothing is created; the process is a ritual |
-
-Without `creates`, every queue looked alike and a `Todo` routed to one landed as an untyped
-line. `process/workflows/` already holds one file per process, so several coexisting queues
-need no new machinery — only this property.
-
-`via` may additionally name *how* creation happens (`via: ee-pm:story-management`). It is a
-**non-normative hint**: harness-agnosticism is a hard constraint, so tooling that does not
-recognize a `via` value must ignore it and proceed, never fail.
+**What this means for authoring:** a conversation that produces an action item still produces
+one. Ingestion reports it as out of scope rather than placing it, and the human takes it
+wherever their team actually tracks work. The mesh does not need to know where that is.
 
 ---
 
 ## Layer B — Domain context (in each domain folder)
 
-Specific to one domain — its codebase, its team. Lives at `<domain>/` **inside the Hub**, using
-the **same layout as the Hub root**, so a path means the same thing at either level.
+Specific to one domain — its codebase, its team. Lives at `domains/<domain>/` **inside the
+Hub**, using the **same layout as the Hub root**, so a path means the same thing at either
+level.
 
 > **Changed 2026-07-21.** Layer B used to live in the code repo and be **mirrored to the Hub by
 > CI on merge to main**, with the leaf authoritative and the Hub copy read-only. There is no
@@ -403,10 +321,16 @@ and cross-referenced — so they get **IDs**, not path-only references. They liv
 
 Product-level (spans iterations), under `product/opportunity-solution-tree/`:
 
-All non-singleton artifact IDs are **4-digit, zero-padded** (`0001`–`9999`) to support
+All non-singleton artifact IDs are **4-digit, zero-padded** (`0000`–`9999`) to support
 very large, long-lived projects without exhausting the number space. (aiviz uses 2–3
 digits; context-mesh standardizes on 4 across every multi-sibling type for headroom and
 consistency.) Combined with the domain prefix, a full ID is e.g. `payments:OPP-0042`.
+
+**`0000` is legal** (settled 2026-08-03). The range used to start at `0001`, which made a
+deliberately zero-indexed artifact — `EPIC-0000`, numbered to signal *"this precedes
+everything"* — out of spec for a reason nobody had decided on. Zero is a useful signal and
+costs nothing, so it is in range. Numbering otherwise starts at `0001` by convention; reserve
+`0000` for the foundational-artifact meaning rather than using it as an ordinary first item.
 
 | Artifact | Folder | ID format |
 |---|---|---|
@@ -418,27 +342,46 @@ Assumptions sit **beside** the tree, not inside it (moved 2026-07-30):
 
 | Artifact | Folder | ID format |
 |---|---|---|
-| Assumption test | `product/assumptions/assumption-NNNN-slug.md` | `ASSUMPTION-NNNN` (frontmatter: `Parent Solution`, **required**) |
+| Assumption test | `product/assumptions/assumption-NNNN-slug.md` | `ASSUMPTION-NNNN` (frontmatter: `Parent Solution`, **optional** — see below) |
 | Assumption map | `product/assumption-maps/SOL-NNNN-slug/miro-metadata.json` | sidecar; see [board-sidecars.md](board-sidecars.md) |
 
-**Why they moved out of `opportunity-solution-tree/`.** An assumption is tested **against a
-solution** — that edge is real and stays required. What is *not* required is an `Outcome` and
-`Opportunity` above that solution. A team can map assumptions for candidate solutions without
-having built a full tree, and that is a legal, expected configuration; nesting the folder
-inside `opportunity-solution-tree/` made such a project carry a tree-shaped directory
-containing only assumptions. The chain is satisfied as far up as it goes.
+**Why they moved out of `opportunity-solution-tree/`.** An assumption is usually tested
+**against a solution**, but a team can map assumptions for candidate solutions without having
+built a full tree, and that is a legal, expected configuration; nesting the folder inside
+`opportunity-solution-tree/` made such a project carry a tree-shaped directory containing only
+assumptions. The chain is satisfied as far up as it goes.
 
-Tracked work with **no discovery lineage** (added 2026-07-30, vocabulary v2.1):
+### No parent is required, anywhere (revised 2026-08-03, vocabulary v2.2)
 
-| Artifact | Folder | ID format |
-|---|---|---|
-| Task | `product/tasks/task-NNNN-slug.md` | `TASK-NNNN` — **no parent frontmatter** |
+This table marked `Parent Solution` **required** on assumptions, and ee-pm enforced it.
+**That was a mistake.** A parentless `Assumption` is legal, and so is a parentless `Story`.
 
-A `Task` is work the team must do that does not trace to a `Solution` — run the workshop,
-chase the DPA, prepare the readout. The absent parent *is* the type; a task that turns out to
-trace to a solution was a `Story` all along. Tasks may also live **wholly outside the mesh**
-when the `Workflow` they route to points at an external tracker — in that case no file exists
-here, and the `Todo` candidate reaches `state: resolved` instead.
+The case that settled it: four bets whose operative content was *which solutions not to design
+yet* — "defer the student home surface until students have been interviewed." An assumption
+that constrains **whether to build anything** cannot have a parent solution, because the tree
+deliberately has none. Requiring one left it with no legal home, contradicting this document's
+own "satisfied as far up as it goes" rationale one paragraph earlier.
+
+**Prefer an explicit absence over a blank field:**
+
+```yaml
+parent: none
+parent-rationale: constrains whether to build at all; no solution exists to hang it from
+```
+
+A blank or missing key reads as *"not filled in yet."* `parent: none` plus a reason says
+*"this genuinely has no discovery lineage"* — a **finding**, not an omission, and the
+difference matters when someone later asks whether the tree is incomplete.
+
+**This is a documentation and ee-pm change, not a walker change.** `check_references.py:137`
+only verifies that a *named* parent resolves; a file with no `parent-*` key emits no edge and
+already could not fail. The requirement lived only in this table and in ee-pm's
+`assumption-map` enforcement.
+
+> **`Task` had a storage row here through v2.1** — `product/tasks/task-NNNN-slug.md`, no
+> parent frontmatter — and is deferred with the rest of the workflow layer. The design is retained privately
+> and may return as a future feature. With parents now optional,
+> a restoration must first re-establish what distinguishes a `Task` from a parentless `Story`.
 
 Iteration-scoped, under `product/iterations/{YYYY-MM-DD-slug}/`:
 
@@ -456,8 +399,10 @@ and within an iteration `Story → Epic`. `Assumption → Solution` hangs off th
 is the typed-edge graph from [knowledge-graph-model.md](knowledge-graph-model.md),
 instantiated.
 
-Two deliberate exceptions: the chain is satisfied **as far up as it goes** (a solution with no
-opportunity above it is legal — see the assumptions note), and `Task` has no chain at all.
+The chain is satisfied **as far up as it goes**, and every link in it is optional — a solution
+with no opportunity above it is legal, and so is a story or assumption with no parent at all
+(see above). What the chain describes is lineage where lineage exists, not a completeness
+requirement.
 
 ---
 
@@ -485,9 +430,8 @@ section of an existing document*; the candidate itself **stays in staging**, mar
 context file states the fact; the candidate records how we know it. Nothing is deleted, and
 nothing literally moves.
 
-Nor is promotion one verb — a `Todo` is handed over to the tracker its `Workflow` names
-(`state: resolved`), an `OpenQuestion` resolves into another type before it can promote at
-all, and a candidate contradicting its target stops for a human. See
+Nor is promotion one verb — an `OpenQuestion` resolves into another type before it can promote
+at all, and a candidate contradicting its target stops for a human. See
 [ingestion-pipeline.md](ingestion-pipeline.md#separate-step--promotion-built-2026-07-16-skillspromote-candidate).
 
 ---

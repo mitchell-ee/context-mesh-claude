@@ -27,7 +27,7 @@ how it gets *populated*.
     │
  [1] INGEST & SANITIZE ──► distilled, PII-cleared Conversation node (staging)
     │
- [2] DISTILL ───────────► typed chunks (Knowledge / Requirement / Todo / DomainFact / …)
+ [2] DISTILL ───────────► typed chunks (Knowledge / Requirement / DomainFact / …)
     │
  [3] PROPOSE PLACEMENTS ─► for each chunk: node + typed edges + target path/ID, in staging
     │                      INDEXES ONLY — never the target files
@@ -98,7 +98,7 @@ implemented as "write it next to the Conversation node and say so plainly." **Op
 
 ### Stage 2 — Distill into typed chunks
 - Break the conversation into atomic **chunks**, each assigned a **node type** from the
-  controlled vocabulary: `Knowledge`, `Requirement`, `Todo`, `DomainFact`, plus discovery
+  controlled vocabulary: `Knowledge`, `Requirement`, `DomainFact`, plus discovery
   types where relevant (`Opportunity`, `Solution`, `Assumption`) and `OpenQuestion` for
   unresolved decisions.
 - A single conversation yields any mix of these. Each chunk records a `derives-from` edge
@@ -115,8 +115,7 @@ step:
 - **Node**: the chunk rewritten as a context-file-shaped entry (title, body, frontmatter).
 - **Typed edges**: concrete, legal-for-the-type edges with real targets, e.g.
   - `Knowledge → applies-to → payments-svc:OPP-0042`
-  - `Requirement → triggers → refinement-workflow`, `Requirement → creates → STORY-0007`
-  - `Todo → routed-to → backlog`
+  - `Requirement → references → STORY-0007`
   - `DomainFact → applies-to → payments`
 - **Target path/ID**: the exact destination the human would approve into — but it is
   written to **staging**, tagged with its eventual canonical target. e.g. a `Knowledge`
@@ -166,13 +165,14 @@ it (and writing its edges)". Against ten real candidates, that is wrong twice ov
 
 - **It is a merge, not a move.** Only one of ten resembled moving a file. A `DomainFact` lands
   *in a section of an existing document*, extending or qualifying what's there.
-- **It is not one verb.** Six outcomes, and the classifier decides which:
+- **It is not one verb.** Four outcomes, and the classifier decides which:
   **MERGE** (into the target file) · **CONTRADICTS** (target says the opposite — a human
-  decides whether the doc or the world moves; never auto-applied) · **HANDOVER** (target is a
-  `Workflow` → the item belongs in Jira; the mesh hands over, it does not file) ·
+  decides whether the doc or the world moves; never auto-applied) ·
   **RESOLVE** (an `OpenQuestion` doesn't promote — it resolves into another type first, via
   the guided-resolution flow below) · **NO-HOME** (`target: null`; fix the manifest first) ·
   **NEVER** (a `Conversation` is a provenance root and stays).
+  (A fifth, **HANDOVER**, routed an item to the `Workflow` that owned its queue; it went with
+  the workflow layer in v2.2 — the design is retained privately and may return as a future feature.)
 
 **Batched by target file.** Three of run 1's candidates targeted one document; promoting them
 singly would mean three conflicting PRs against the same file and a human reading it three
@@ -180,10 +180,10 @@ times. One of the three was a `contradicts` — and **a contradiction can change
 candidates in its batch should say**, so it is resolved before the rest are merged, not merged
 around.
 
-**Candidates are kept, never deleted** — marked `state: canonical` (merged) or
-`state: resolved` (handed over, v1.3). The context file states the fact; **the candidate is
-the audit trail**, carrying the `derives-from` chain back to the conversation. A Jira ticket
-cannot hold that, and neither can a canonical context file.
+**Candidates are kept, never deleted** — marked `state: canonical` once merged. The context
+file states the fact; **the candidate is the audit trail**, carrying the `derives-from` chain
+back to the conversation, which a canonical context file cannot hold. (`state: resolved`, for
+an item handed to an external tracker, went with the workflow layer in v2.2.)
 
 ## The guided-resolution flow (for undecided material)
 
@@ -196,15 +196,16 @@ Undecided chunks (`OpenQuestion`, speculative `Opportunity`/`Requirement`) need 
    move it from "open" staging into promotion-ready staging.
 
 This is the agentic "guide humans through the steps to figure out where it goes" from
-CLAUDE.md, made concrete.
+the project's core principles, made concrete.
 
 ## Controlled vocabulary touch-point
 
 Stages 2–3 classify into and enforce the **node/edge type system**, now locked in
-[vocabulary.md](vocabulary.md) (v1). Stage-3 placement legality is exactly that doc's
+[vocabulary.md](vocabulary.md) (**v2.2**). Stage-3 placement legality is exactly that doc's
 **legal-edge matrix** — an edge not in the matrix is the validation error mentioned above.
-The types this spec surfaced (`OpenQuestion`; edges `routed-to`, `rendered-on`,
-`contradicts`) are folded into the lock.
+The types this spec surfaced (`OpenQuestion`; edges `rendered-on`, `contradicts`) are folded
+into the lock. It also surfaced `routed-to`, which was locked in and then **deferred in v2.2**
+with the rest of the workflow layer.
 
 ## Open questions
 
