@@ -1,8 +1,9 @@
 # context-mesh — node & edge vocabulary (the schema)
 
-Status: **LOCKED v2.2** (v1 2026-06-25; v1.1–v1.3 2026-07-16; v2.0 2026-07-21 — the
-single-Hub collapse; v2.1 2026-07-30; **v2.2 2026-08-03 — workflow routing deferred,
-domains under `domains/`**, see Versioning). This is the controlled vocabulary — the type system of
+Status: **LOCKED v2.3** (v1 2026-06-25; v1.1–v1.3 2026-07-16; v2.0 2026-07-21 — the
+single-Hub collapse; v2.1 2026-07-30; v2.2 2026-08-03 — workflow routing deferred,
+domains under `domains/`; **v2.3 2026-08-04 — the mesh declares its own vocabulary
+version**, see Versioning). This is the controlled vocabulary — the type system of
 the knowledge graph. It is the schema the rest of the system references:
 [ingestion-pipeline.md](ingestion-pipeline.md) stages 2–3 classify into these types and
 [file-taxonomy.md](file-taxonomy.md) stores them. Changes here ripple everywhere —
@@ -304,11 +305,40 @@ frontmatter.
 
 ## Versioning
 
-This vocabulary is **v2.2**. Adding a type is a minor bump; changing an edge's legality or
+This vocabulary is **v2.3**. Adding a type is a minor bump; changing an edge's legality or
 removing a type is a major bump and requires updating every dependent doc. **Adding a
 required property to an existing type is a minor bump** — it constrains what a valid
 instance looks like without changing what the graph traverses. (This case was unspecified
 until v1.1 needed it.) The lock exists so ingestion and storage agree on one schema.
+
+### v2.3 (2026-08-04) — the mesh declares its own vocabulary version. **Additive.**
+
+**The Hub root's `context-index.md` carries a `**Mesh vocabulary:**` line** in its Identity
+block, beside `**PII policy:**`. It names the schema version the mesh's content is written
+in. Additive: a mesh without the line is valid, and reads as *unknown*, never as *current*.
+
+**It is a prompt trigger, not a selector.** Setup reads it to decide whether to *say*
+something; every migration decides whether it applies by inspecting content shape. If the
+marker selected migrations, an unmarked mesh — every mesh built before this version — would
+silently skip all of them. Migrations run in full, always, and guard themselves.
+
+**Root only.** One marker per mesh: a domain-level copy could disagree with the root's, and
+there is nothing a per-domain vocabulary version would mean.
+
+The mesh does not migrate itself. `skills/setup-mesh/migrations/` holds one guarded,
+idempotent file per convention change, under a rule stricter than the schema requires:
+
+> **A migration only ever edits an index, or reports. It never moves, deletes, or rewrites
+> content in the mesh.**
+
+The plugin only ever *adds*. Mesh content is the team's, often the only copy, and worth more
+than the tooling — so a migration that would relocate a directory it might have
+misidentified **reports instead**, and the human moves it.
+
+**Two v2.2 changes need no migration**, recorded so nobody writes a no-op later: parents
+becoming optional and IDs widening to `0000`–`9999` are both pure loosenings. Existing
+content stays valid. A convention change needs a migration only when existing content becomes
+**wrong**, not when it becomes non-mandatory.
 
 ### v2.2 (2026-08-03) — workflow routing deferred; domains under `domains/`. **Breaking.**
 

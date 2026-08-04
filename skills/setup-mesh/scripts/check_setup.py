@@ -41,6 +41,23 @@ LINK = re.compile(r"\[[^\]]+\]\(([^)#]+\.md)\)")
 # missing file the index never actually listed. Stripped before any link is read.
 COMMENT = re.compile(r"<!--.*?-->", re.S)
 
+# The root index's `- **Mesh vocabulary:** v2.2` line -- the schema version this mesh's
+# content is written in. Read from the ROOT index only; domains do not carry it.
+VOCABULARY_LINE = re.compile(r"^\s*-\s*\*\*Mesh vocabulary:\*\*\s*(\S+)", re.M)
+
+
+def read_vocabulary(index_text):
+    """The mesh's declared vocabulary version, or None if unmarked.
+
+    None is a normal state, not an error: every mesh scaffolded before the marker existed
+    lacks one, and so does one whose index was hand-authored. It means "unknown", never
+    "old" -- migrations decide whether they apply by inspecting DATA, not this value. The
+    marker exists so setup can PROMPT; if it were the selector, an unmarked mesh would
+    silently skip every migration.
+    """
+    m = VOCABULARY_LINE.search(COMMENT.sub("", index_text))
+    return m.group(1).strip() if m else None
+
 
 def find_listed_files(index_text):
     """Paths the index links to, minus external/absolute ones we can't check.

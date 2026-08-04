@@ -26,6 +26,11 @@ them, and don't maintain a membership list.
 
 **Always check the Hub root.** Every run: if it has no `context-index.md`, stand it up first.
 
+**The root index carries the mesh vocabulary version.** Its Identity section has a
+`**Mesh vocabulary:**` line naming the schema version this mesh's content is written in.
+Setup reads it to tell whether the mesh predates a convention change — see
+[Migrations](#migrations). A missing marker means *unknown*, not *current*.
+
 **The root index carries the PII policy.** Its Identity section has a `**PII policy:**` line —
 `strip` (the default) or `enrich` — read by both the transcript structurer (the
 `structure-transcript` skill and [its prompt](../../prompts/structure-transcript.md)) and
@@ -160,11 +165,64 @@ and missing. Backtick them, one bullet each, with the reason:
 | **Pending home** | a context-table row, linked | Declared home; not written yet |
 | **Broken link** | a context-table row, linked | Was real, now missing — a genuine error |
 
+## Migrations
+
+The plugin cannot run code when it is updated — there is no install hook — so migration is
+**lazy**: the Hub root index's `**Mesh vocabulary:**` line makes the gap visible the next
+time this skill runs, and this skill applies the fix.
+
+**The marker prompts; it never selects.** Every migration decides for itself whether it
+applies by inspecting content, so a mesh with **no** marker (scaffolded before the marker
+existed, or hand-authored) still migrates correctly. Treat a missing marker as *unknown*,
+never as *current*.
+
+**Run every migration in
+`${CLAUDE_PLUGIN_ROOT}/skills/setup-mesh/migrations/`, in version order — including ones
+at or below the mesh's marker.** Do not filter by version. That is what the guards are for,
+and it is what makes a **retroactively added** migration work: one written after meshes
+already reached that version would never be selected by a newer-than filter.
+
+**The migrations ship with the plugin**, at
+`${CLAUDE_PLUGIN_ROOT}/skills/setup-mesh/migrations/`, never in the user's Hub. **A bare
+relative path like `migrations/` is ambiguous** — resolved against the Hub it finds nothing,
+which is not evidence of a packaging problem. Re-resolve `${CLAUDE_PLUGIN_ROOT}` before
+concluding anything.
+
+| Migration | Applies when | Does |
+|---|---|---|
+| [0.3.0-domains-under-domains.md](migrations/0.3.0-domains-under-domains.md) | a root-level dir holds a `context-index.md` | **reports only** — the human moves it |
+| [0.3.0-defer-workflow-layer.md](migrations/0.3.0-defer-workflow-layer.md) | a `## Workflows` section, or a row into `process/workflows/` | removes those index rows; reports what is now unreferenced |
+
+**The one rule every migration honors** ([migrations/README.md](migrations/README.md)):
+
+> **A migration only ever edits an index, or reports. It never moves, deletes, or rewrites
+> content in the mesh.**
+
+The plugin only ever *adds* to the mesh. Content is the team's — often the only copy, and
+worth more than the tooling. A migration that wants to move a file **reports instead**.
+
+For each migration: **preview, show, ask, then apply.** Never migrate without approval. If
+they decline one, honor it, skip it, and **do not stamp the marker** — the mesh is still
+mid-migration.
+
+### Stamping
+
+**Do not stamp because the migrations ran. Stamp because the content is correct.**
+
+After migrations, re-run the verification below. Update the root index's
+`**Mesh vocabulary:**` line to the plugin's vocabulary **only if** every check passes and no
+migration with real work to do was declined. A stamped mesh that is still stale is worse than
+an unstamped one: nothing prompts, and the staleness is invisible.
+
+If a check fails, leave the marker alone and say why. The gap staying visible is the intended
+behavior, not a defect to work around.
+
 ## Verify
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/setup-mesh/scripts/check_setup.py" <hub-root>        # the root, or one domain, in detail
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/setup-mesh/scripts/survey_mesh.py" <hub-root>        # the whole Hub, triaged
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/setup-mesh/scripts/survey_mesh.py" <hub-root> --manifest   # every tracked file, grouped
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/setup-mesh/scripts/check_references.py" <hub-root>   # every edge target resolves
 ```
 
@@ -194,10 +252,24 @@ unreported before.
 
 ## When you're done
 
-Say plainly:
+**Always end by showing the manifest** — `survey_mesh.py <hub-root> --manifest`. It lists
+every file the indexes track, grouped by the Hub root and each domain, marking each `ok`,
+`MISSING` (tracked but absent — facts would route into a vacuum), or `unlisted` (present but
+invisible to routing).
+
+Show it in full rather than summarizing. The triage output says what is *broken*; the
+manifest is how a human checks what is **right** — a file tracked under the wrong domain, or
+one they expected and cannot find, is not an error any script can detect, and it is exactly
+what a person reading the list will spot. Invite them to correct anything that looks wrong.
+
+Then say plainly:
 
 - What was declared, and what was already there.
 - **Which context files are missing** relative to the default manifest — as a *list for the
   humans*, not a to-do for the skill. Ingestion will report gaps honestly when it hits them.
 - Whether the index actually lists anything yet — a scaffolded stub is set up but cannot
   receive a fact until someone fills it in.
+- **Any context routing cannot see** — a root-level directory holding an index, reported by
+  the survey. Say what it is, and that nothing was moved. Never call it a domain: an index
+  outside `domains/` is a fact about visibility, not a diagnosis of what the directory is.
+- **Whether the marker was stamped**, and if not, what still has to be true first.

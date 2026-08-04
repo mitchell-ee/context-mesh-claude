@@ -40,6 +40,11 @@ import sys
 INDEX = "context-index.md"
 DOMAINS_DIR = "domains"
 
+# The vocabulary version this scaffold writes into a new root index's `Mesh vocabulary:` line.
+# Bump it when a vocabulary change lands, and ship a migration alongside -- see
+# `migrations/README.md`. The marker prompts; it never selects (guards key on data shape).
+VOCABULARY = "v2.3"
+
 # Directories every container gets. Empty ones are honest: nothing routes to a dir.
 #
 # The root and a domain took different lists until v2.2, because a domain also got
@@ -132,7 +137,14 @@ Read it first; load only what the current task needs. Do not load the whole mesh
 
 - **Role:** AI Hub — the one repo where all context lives
 - **Owns:** cross-cutting canonical context — the context that belongs to everybody
+- **Mesh vocabulary:** {vocabulary}
 - **PII policy:** strip
+
+<!-- Mesh vocabulary is the schema version this mesh's content is written in. Setup reads it
+     to tell whether the mesh predates a convention change, and prompts if it does. It is a
+     PROMPT TRIGGER, NOT A SELECTOR: every migration decides for itself whether it applies by
+     inspecting the data, so a mesh with no marker, or one already fixed by hand, still
+     behaves correctly. Setup rewrites this line only after the data actually checks out. -->
 
 <!-- PII policy is read by the transcript structurer (prompts/structure-transcript.md) and by
      ingest-conversation. `strip` (the default) redacts speaker identity; `enrich` preserves
@@ -218,7 +230,8 @@ def scaffold(path, name, is_root, dry_run=False):
     else:
         created.append(INDEX)
         if not dry_run:
-            body = ROOT_INDEX if is_root else DOMAIN_INDEX.format(name=name)
+            body = (ROOT_INDEX.format(vocabulary=VOCABULARY) if is_root
+                    else DOMAIN_INDEX.format(name=name))
             with open(index_path, "w") as fh:
                 fh.write(body)
 

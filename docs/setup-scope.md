@@ -26,12 +26,49 @@ add mode.
    input. A human names them. Adding a domain later means **running setup again** — the same
    command, not a separate path.
 3. **Per named domain,** create the directory skeleton and a domain `context-index.md`.
-4. **Report the aggregate** — which domains are ready, which need a human decision (an index
+4. **Migrate, if the mesh predates a convention change** — see below.
+5. **Report the aggregate** — which domains are ready, which need a human decision (an index
    with no entries can receive nothing, even though it is not broken).
+6. **Report the manifest** — every file the indexes track, grouped by the Hub root and each
+   domain. The aggregate says what is *broken*; the manifest is how a human checks what is
+   **right**. A file tracked under the wrong domain, or one they expected and cannot find, is
+   not an error any script can detect, and it is exactly what a person reading a list spots.
 
 **Idempotence is the load-bearing property.** It is what makes "run it again to add a domain"
 safe rather than a second code path. A run naming five domains where four are already
 configured does exactly the work of a run naming the one new domain.
+
+---
+
+## Migration: the plugin only ever adds
+
+The plugin cannot run code when it is updated — there is no install hook — so migration is
+**lazy**. The Hub root index carries a `**Mesh vocabulary:**` marker; setup reads it, notices
+the gap, and applies the fix. **The marker prompts; it never selects.** Every migration guards
+on *content shape*, so a mesh with no marker — every mesh built before the marker existed —
+still migrates correctly. Setup runs the whole set, in version order, every time.
+
+One rule governs every migration:
+
+> **A migration only ever edits an index, or reports. It never moves, deletes, or rewrites
+> content in the mesh.**
+
+Mesh content is the team's — authored by people, often the only copy, and worth more than the
+tooling. A migration that relocates a directory it misidentified, or deletes a file it
+misread, destroys something the plugin did not create and cannot restore. So the two things a
+migration may do are **edit the index** (the plugin's own artifact, and the routing input) and
+**report**.
+
+**This is not a limitation worked around; it is the design.** The pre-v2.2 layout put domains
+at the Hub root, and the obvious migration would move them under `domains/`. It doesn't —
+because deciding which root-level directory *is* a domain is exactly the heuristic v2.2
+deleted after it misidentified a docs folder while missing the real domain. The migration
+reports what routing cannot see, states plainly that this is **not** a claim about what the
+directory is, and the human moves it. Automation lost, correctness kept.
+
+A convention change needs a migration only when existing content becomes **wrong** — not when
+it merely becomes non-mandatory. Parents becoming optional and IDs widening to `0000`–`9999`
+are pure loosenings and need none.
 
 ---
 

@@ -71,7 +71,7 @@ flowchart TD
 
 | Step | What it does | Who decides |
 |---|---|---|
-| **`/setup-mesh`** | Surveys the Hub, scaffolds containers, helps declare each `context-index.md`. Idempotent — re-run it to add a domain. | A human supplies *what a file is about* and *when to load it*. A script cannot guess those. |
+| **`/setup-mesh`** | Surveys the Hub, scaffolds containers, helps declare each `context-index.md`, migrates a mesh built on an older vocabulary, and reports the manifest. Idempotent — re-run it to add a domain. | A human supplies *what a file is about* and *when to load it*. A script cannot guess those. Migrations edit indexes and report; **moving content is always the human's**. |
 | **`/structure-transcript`** | Optional. Turns a raw transcript into a clean, labelled one. **Cleanup and labelling only** — it never assigns a type. Also available as a plain prompt (`prompts/structure-transcript.md`) to run in any tool. | — |
 | **`/ingest-conversation`** | Sanitizes, distils into typed chunks, proposes a placement per chunk, then dedups against the one file routing chose. | — |
 | **The checkpoint** | Every proposed placement, **least-confident first**. | **You.** `approve`, `retry N <reason>`, or `drop N`. |

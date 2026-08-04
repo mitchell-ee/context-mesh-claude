@@ -18,7 +18,16 @@ decide that. A file not listed here is invisible to routing.
 - **ID prefix:** `<domain>:` (e.g. `<domain>:OPP-0001`)
 
 <!-- A domain is a namespace, not necessarily a code repository: it may map to one repo, span
-     several, or be finer than one. Say which in **About**. -->
+     several, or be finer than one. Say which in **About**.
+
+     A domain is EXACTLY a directory under `domains/`. A domain index anywhere else is
+     invisible to routing — the survey reports it, and a human moves it. Nothing detects
+     domain-ness from a directory's contents (that heuristic existed through v2.1 and
+     misidentified a docs folder as a domain while missing the real one).
+
+     NO `Mesh vocabulary:` LINE HERE. The marker is mesh-wide and lives in the Hub ROOT
+     index only; one per mesh means there is nothing to drift out of sync. -->
+
 
 ## Canonical context
 
