@@ -17,15 +17,16 @@ how it gets *populated*.
   staging→canonical human act, out of scope here).
 - **The agent proposes full placements** — node *and* typed edges *and* a concrete target
   path/ID — and the human is an **editor** at the gate (approve / edit / reject per chunk).
-- **No raw transcript stored** (GDPR/PII): sanitize at ingest; persist only the distilled,
-  PII-cleared version.
+- **The transcript is not modified** — no redaction, no anonymization. What arrives is what
+  gets read. Only the distilled version is persisted (plus the transcript itself when
+  `archived`, because nothing else would hold it).
 
 ## The pipeline (4 stages + a separate promotion step)
 
 ```
  transcript
     │
- [1] INGEST & SANITIZE ──► distilled, PII-cleared Conversation node (staging)
+ [1] INGEST ────────────► distilled Conversation node (staging); transcript unmodified
     │
  [2] DISTILL ───────────► typed chunks (Knowledge / Requirement / DomainFact / …)
     │
@@ -45,22 +46,26 @@ how it gets *populated*.
  (separate, later, human-initiated) PROMOTE staging → canonical  ← the PR gate lives here
 ```
 
-### Stage 1 — Ingest & sanitize
-- Accept a raw transcript (Granola export, Slack thread, meeting transcript, chat log).
-- **Sanitize immediately:** strip/clear PII, redact secrets. This happens *before*
-  anything is persisted, so raw PII never lands on disk.
-- Emit one `Conversation` node (the distilled, sanitized record) into staging. It carries a
-  **source reference** plus source, date, participants (role-anonymized if required), and a
+### Stage 1 — Ingest
+- Accept a transcript (Granola export, Slack thread, meeting transcript, chat log).
+- **Do nothing to it.** No redaction, no anonymization, no substitution of speaker names.
+  This was a `strip | enrich` PII policy through v2.3, and stripping was the default; it is
+  gone as of v2.4. Normalizing a transcript is a *quality* concern, not a privacy posture —
+  the useful form of it resolves a speaker to the right person rather than replacing them
+  with a label, and it belongs in a **pre-pass**, not buried in ingestion.
+- Emit one `Conversation` node (the distilled record) into staging. It carries a
+  **source reference** plus source, date, participants as given, and a
   content hash — see [vocabulary.md](vocabulary.md#conversation--required-properties-added-v11-2026-07-16)
-  (v1.1). The raw transcript is **discarded** after distillation.
+  (v1.1). The transcript is **discarded** after distillation, unless `archived`.
 - An **optional pre-pass** can clean and label the raw transcript *before* stage 1 — the
   `structure-transcript` skill, or equivalently
   [`prompts/structure-transcript.md`](../prompts/structure-transcript.md) run anywhere (the
   skill is a thin wrapper around that prompt, which stays the source of truth). It does what a
   good Granola template does, but for any transcript from any tool. It is
   a pre-pass, **not** stage 1: it only cleans and labels (never types, never routes), and its
-  output is still just a transcript that enters stage 1 the same way raw input does. Sanitization
-  here (1b) stays unconditional even when the pre-pass has already run once.
+  output is still just a transcript that enters stage 1 the same way raw input does. **The
+  pre-pass is where transcript-quality work belongs** — including, in future, resolving a
+  speaker who appears under several names to one person.
 
 #### Source and retention (specified 2026-07-16)
 
@@ -79,19 +84,21 @@ normal case, *we don't need to keep the transcript, because someone else already
 | `source_kind` | When | Retention |
 |---|---|---|
 | `referenced` | Granola, Slack, Zoom, a ticket — a system with its own retention and access control | **Store nothing.** Point at it. The no-raw-storage rule below applies in full. |
-| `archived` | Hand-provided material with no datastore behind it | **Archive the sanitized transcript** at `source_archive`. Reference-only would point at nothing and the source would simply vanish. |
+| `archived` | Hand-provided material with no datastore behind it | **Archive the transcript** at `source_archive`. Reference-only would point at nothing and the source would simply vanish. |
 | `ephemeral` | Source gone, never archived | Nothing to point at. Legal but weak — **flag it at the gate.** |
 
-**This does not reverse "no raw transcript stored."** That rule was a GDPR posture, and it
-stands wherever it can: a transcript is the highest-PII artifact in the system, and the
-cheapest way not to leak it is not to hold it. It assumed the raw material was *disposable* —
-true when the source datastore keeps it, false when someone pastes in the only copy. The
-`archived` case is a **narrow, deliberate exception for material that would otherwise be
-lost**, not a general licence to accumulate transcripts. Custody stays the exception.
+**This does not reverse "no transcript stored."** That rule holds wherever it can — not
+because the content is dangerous, but because a copy the mesh does not need is a copy that
+drifts from the system that owns it. It assumed the material was *disposable* — true when the
+source datastore keeps it, false when someone pastes in the only copy. The `archived` case is
+a **narrow, deliberate exception for material that would otherwise be lost**, not a general
+licence to accumulate transcripts.
 
-**The archive is still sanitized.** `archived` changes *whether a copy is kept*, never
-*whether PII is stripped*. Sanitization happens at ingest, before anything is written,
-in every case. There is no path in this pipeline that writes raw PII to disk.
+**The archive is the transcript as received.** Through v2.3 it was a sanitized copy; as of
+v2.4 nothing in this pipeline modifies a transcript, so what is archived is what arrived.
+**Retention is the team's call about their own repo** — a mesh that does not want transcripts
+in its history can `.gitignore` the archive path, which is a more honest lever than a pipeline
+that quietly rewrites their content.
 
 **What the archive needs, and does not have yet:** a retention period, an access-control
 model, and a deletion path. Those are the client's obligations and their DPO's call — not

@@ -58,7 +58,7 @@ edges:
 - **`referenced`** — the normal case. Granola/Slack/Zoom/a ticket already holds it, with its
   own retention and access control. **Store nothing.** Never set `source_archive`.
 - **`archived`** — hand-provided, no datastore behind it. Reference-only would point at
-  nothing, so archive the **sanitized** transcript beside this node and record the path.
+  nothing, so archive the transcript **as received** beside this node and record the path.
   The exception, not the default.
 - **`ephemeral`** — nothing to point at. Legal, but the facts derived from it can never be
   checked. Flagged at the checkpoint.

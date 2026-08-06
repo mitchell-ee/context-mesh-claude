@@ -30,7 +30,7 @@ flowchart TD
 
     subgraph INGEST["② INGESTION — once per conversation"]
         P["<b>/structure-transcript</b><br/><i>optional pre-pass:</i> clean + label<br/>never types, never routes<br/><i>(also a plain prompt — runs anywhere)</i>"]
-        I1["<b>/ingest-conversation</b><br/>1 · sanitize + identify the source<br/>2 · distill into typed chunks<br/>3 · propose placements<br/>3.5 · dedup against the target"]
+        I1["<b>/ingest-conversation</b><br/>1 · identify the source<br/>2 · distill into typed chunks<br/>3 · propose placements<br/>3.5 · dedup against the target"]
         GATE1{{"<b>HUMAN CHECKPOINT</b><br/>every placement, least-confident first<br/>approve · retry N · drop N"}}
         P --> I1
         I1 --> GATE1
@@ -73,7 +73,7 @@ flowchart TD
 |---|---|---|
 | **`/setup-mesh`** | Surveys the Hub, scaffolds containers, helps declare each `context-index.md`, migrates a mesh built on an older vocabulary, and reports the manifest. Idempotent — re-run it to add a domain. | A human supplies *what a file is about* and *when to load it*. A script cannot guess those. Migrations edit indexes and report; **moving content is always the human's**. |
 | **`/structure-transcript`** | Optional. Turns a raw transcript into a clean, labelled one. **Cleanup and labelling only** — it never assigns a type. Also available as a plain prompt (`prompts/structure-transcript.md`) to run in any tool. | — |
-| **`/ingest-conversation`** | Sanitizes, distils into typed chunks, proposes a placement per chunk, then dedups against the one file routing chose. | — |
+| **`/ingest-conversation`** | Distils into typed chunks, proposes a placement per chunk, then dedups against the one file routing chose. The transcript itself is never modified. | — |
 | **The checkpoint** | Every proposed placement, **least-confident first**. | **You.** `approve`, `retry N <reason>`, or `drop N`. |
 | **`staging/candidates/`** | Where approved candidates land. Written directly — no PR. | — |
 | **`/promote-candidate`** | Classifies each candidate and batches by target file, so one document is one edit. | — |
@@ -108,7 +108,7 @@ flowchart TD
     HUB["<b>The AI Hub</b><br/><i>one repo, all context</i>"]
 
     subgraph ROOT["Hub root — cross-cutting: governs everybody"]
-        RI["<b>context-index.md</b><br/>the root loader · declares the domains · PII policy"]
+        RI["<b>context-index.md</b><br/>the root loader · declares the domains · mesh vocabulary"]
         RP["product/<br/><i>business context, personas, glossary</i>"]
         RT["technical/<br/><i>target architecture, coding standards</i>"]
         RG["process/ · governance/"]

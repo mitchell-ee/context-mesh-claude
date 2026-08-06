@@ -18,7 +18,7 @@ build:
 
 | Stage | What it actually is |
 |---|---|
-| 1 — Ingest & sanitize | a prompt |
+| 1 — Ingest | a prompt |
 | 2 — Distill into typed chunks | a prompt + the [vocabulary](vocabulary.md) as schema |
 | 3 — Propose placements | the same LLM call; the legal-edge matrix is the validation |
 | 4 — Human gate | **the in-run checkpoint** (decided below) |

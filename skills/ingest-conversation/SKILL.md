@@ -66,7 +66,7 @@ the mesh. If a placement's target is wrong, the fix is at the checkpoint, not a 
 `scripts/collect_dedup_targets.py` computes the permitted read set from the placements so
 the bound is auditable rather than a matter of restraint.
 
-## Stage 1 — Ingest, identify the source, sanitize
+## Stage 1 — Ingest and identify the source
 
 ### 1a. Establish where it came from — *before* reading it for content
 
@@ -82,7 +82,7 @@ already:
 |---|---|---|
 | A Granola export / note ID | `referenced`, `source_ref: granola:note/<id>` | "Taking this as Granola note `<id>` — nothing archived." |
 | A Slack permalink / thread | `referenced`, `source_ref: slack:<permalink>` | "Referencing the Slack thread." |
-| A file path | **`archived`** — a path is not a datastore | "This is a file path, so I'll archive a sanitized copy unless it's an export from something I should reference instead." |
+| A file path | **`archived`** — a path is not a datastore | "This is a file path, so I'll archive a copy unless it's an export from something I should reference instead." |
 | Pasted text | **`ephemeral`** | "No source to point at — provenance will be weak. Tell me if it's from somewhere I can reference." |
 
 **There is no config file for this**, deliberately. A saved default would be a hint you'd have
@@ -105,52 +105,52 @@ which means *this run is the only thing standing between that transcript and obl
 `rm` from gone, and the skill doesn't own it. Ingesting from a path is `archived` unless
 that path is a synced export from a real system you can name.
 
-### 1b. Sanitize — before anything is written, in every case
+### 1b. The transcript is not modified
 
-- Strip PII: names of real people outside the participant list, emails, phone numbers,
-  addresses, account numbers, customer identifiers.
-- Redact secrets: keys, tokens, passwords, connection strings.
-- Anonymize client names per the project convention (Client A / Client B) unless the mesh
-  already names them.
+**Ingestion does nothing to the transcript before extracting from it.** No redaction, no
+anonymization, no substitution of speaker names. What arrives is what gets read, and — for
+`archived` — what gets written.
 
-**This is unconditional.** `source_kind` decides whether a *copy is kept*, never whether PII
-is stripped. **No path through this skill writes raw PII to disk.**
+This was a `strip | enrich` PII policy through v2.3, and stage 1b redacted unconditionally.
+It is gone. Transcripts come from meetings whose participants are internal or have consented
+to recording, and **normalizing a transcript before extraction is a transcript-quality
+concern, not a privacy posture** — the useful version of it resolves a speaker to the right
+person rather than replacing them with a label. That work is expected to arrive as a
+**pre-pass** (see the structurer, which occupies the same slot), not as a redaction stage
+buried in ingestion.
 
-**Read the mesh's `PII policy` from the Hub root `context-index.md`** (Identity section:
-`strip` or `enrich`). Under `strip` — the default — redact speaker identity as above. Under
-`enrich`, keep participant names and roles (the mesh has chosen to hold that data), but still
-redact secrets and non-participant PII. `enrich` narrows *what* counts as PII here; it never
-turns sanitization off.
+**Retention is the team's lever, not this skill's.** A mesh that does not want transcripts in
+its history can `.gitignore` them; that is a decision about the repo, made by the people who
+own it, and it is more honest than a pipeline that quietly rewrites their content.
 
 **If the input is already structured** — by the `structure-transcript` skill, by
 [its underlying prompt](../../prompts/structure-transcript.md) run elsewhere, or by a Granola
-template — this pass is *lighter*, because a first sanitization already ran. It is
-**never skipped.** The structurer may run entirely outside the mesh's control, so stage 1b stays
-unconditional and authoritative: it is the last sanitizer, not the only one. Structured input is
-still just a transcript — it flows through this same stage-1 path, no special case.
+template — it needs no special handling. Structured input is still just a transcript, and
+flows through this same stage-1 path.
 
 ### 1c. Archive — only when nothing else will hold it
 
-For `archived` only: write the **sanitized** transcript next to the `Conversation` node
+For `archived` only: write the transcript next to the `Conversation` node
 (`staging/candidates/<conv-id>-transcript.md`) and record the path as `source_archive`.
 
-The rule everywhere else is **no raw transcript stored** — a transcript is the highest-PII
-artifact in the system, and the cheapest way not to leak it is not to hold it. That rule
-assumed the raw material was disposable, which is true when a datastore keeps it and false
-when someone pastes in the only copy. So: **archive the exception, never the default.**
+The rule everywhere else is **no transcript stored** — not because the content is dangerous,
+but because a copy the mesh does not need is a copy that drifts from the system that owns it.
+That holds when a datastore keeps the original and fails when someone pastes in the only copy.
+So: **archive the exception, never the default.**
 
-Say plainly at the checkpoint and in the commit summary that an archive was written.
-Retention period, access control, and deletion path are the client's call — this skill does
-not invent them.
+Say plainly at the checkpoint and in the commit summary that an archive was written, and that
+it is the transcript **as received**. Retention period, access control, and deletion path are
+the team's call — this skill does not invent them, and a team that does not want transcripts
+in its history can `.gitignore` the archive path.
 
 ### 1d. Emit the `Conversation` node
 
 The provenance root, per [vocabulary.md](../../docs/vocabulary.md) v1.1: `source_ref`,
 `source_kind`, `content_hash` (idempotency — same hash re-ingested updates, not duplicates),
-plus source, date, and role-anonymized participants.
+plus source, date, and participants **as the transcript gives them**.
 
-Then **discard the raw transcript.** Only the distilled version — and, for `archived`, the
-sanitized copy — survives the run.
+Then **discard the working copy of the transcript.** Only the distilled version — and, for
+`archived`, the archived copy — survives the run.
 
 ## Stage 2 — Distill into typed chunks
 
@@ -330,7 +330,7 @@ They can:
 
 **This checkpoint is the human gate — there is no later PR into staging.** It has to be here,
 because right now the transcript is still in context and re-proposing is nearly free. After
-the run it is **gone** — sanitized at ingest, never persisted — and a wrong placement could
+the run it is **gone** — never persisted, unless `archived` — and a wrong placement could
 only be hand-edited, without the source that produced it. So both jobs a reviewer needs,
 *approve* and *repair*, happen here, while the source is still in hand. Staging is written
 directly on approval; the next gate is promotion into canonical context.
@@ -407,7 +407,7 @@ The facts now sit in staging, waiting for a separate, human-initiated promotion.
 ## Pipeline at a glance
 
 ```
-1  ingest & sanitize      raw transcript in, never persisted
+1  ingest                 transcript in, unmodified, never persisted unless `archived`
 2  distill                typed chunks, decided/undecided, most of the transcript discarded
 3  propose placements     INDEXES ONLY -- target + legal edges + confidence
 3.5 dedup                 read ONLY the targets routing chose; drop dupes, flag conflicts

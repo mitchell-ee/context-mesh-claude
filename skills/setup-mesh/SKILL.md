@@ -31,13 +31,6 @@ them, and don't maintain a membership list.
 Setup reads it to tell whether the mesh predates a convention change — see
 [Migrations](#migrations). A missing marker means *unknown*, not *current*.
 
-**The root index carries the PII policy.** Its Identity section has a `**PII policy:**` line —
-`strip` (the default) or `enrich` — read by both the transcript structurer (the
-`structure-transcript` skill and [its prompt](../../prompts/structure-transcript.md)) and
-`ingest-conversation`. `strip` redacts speaker identity; `enrich` preserves who-said-what and
-takes on client + DPO custody obligations. Scaffold writes `strip`; changing it to `enrich` is
-a deliberate data-custody decision, not a setup default — surface it, don't flip it unasked.
-
 ## Survey first, then scaffold
 
 Two scripts, and the order matters — **survey is read-only; scaffold is the only writer.**
@@ -192,6 +185,7 @@ concluding anything.
 |---|---|---|
 | [0.3.0-domains-under-domains.md](migrations/0.3.0-domains-under-domains.md) | a root-level dir holds a `context-index.md` | **reports only** — the human moves it |
 | [0.3.0-defer-workflow-layer.md](migrations/0.3.0-defer-workflow-layer.md) | a `## Workflows` section, or a row into `process/workflows/` | removes those index rows; reports what is now unreferenced |
+| [0.6.0-remove-pii-policy.md](migrations/0.6.0-remove-pii-policy.md) | the Hub root index has a `**PII policy:**` line | removes that line; reports that ingestion no longer redacts |
 
 **The one rule every migration honors** ([migrations/README.md](migrations/README.md)):
 

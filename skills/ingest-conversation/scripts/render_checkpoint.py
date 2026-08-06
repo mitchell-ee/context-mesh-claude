@@ -77,8 +77,8 @@ def provenance_line(conv):
     if kind == "referenced":
         return f"Source: {ref}  (held by its own datastore -- nothing archived here)"
     if kind == "archived":
-        return (f"Source: {ref}  (no datastore behind it -- sanitized copy archived at "
-                f"{conv.get('source_archive')})")
+        return (f"Source: {ref}  (no datastore behind it -- transcript archived AS RECEIVED "
+                f"at {conv.get('source_archive')})")
     if kind == "ephemeral":
         return ("Source: EPHEMERAL -- nothing to point at. Facts below cannot be checked "
                 "against the original, now or ever.")
@@ -167,9 +167,13 @@ def render_pr_body(chunks, dropped, conv=None):
         if kind == "referenced":
             print(f"Source `{ref}` — held by its own datastore. No transcript archived here.")
         elif kind == "archived":
-            print(f"Source `{ref}` — no datastore behind it, so a **sanitized copy was "
-                  f"archived** at `{conv.get('source_archive')}`. Retention and deletion "
-                  f"for that copy are not set by this tool.")
+            # Say "as received" rather than "sanitized": through v2.3 the archived copy was
+            # redacted, and a checkpoint line claiming that when nothing was modified is a
+            # false assurance -- the human reading it decides whether to keep the file.
+            print(f"Source `{ref}` — no datastore behind it, so the transcript was "
+                  f"**archived as received** at `{conv.get('source_archive')}`. It is not "
+                  f"redacted. Retention and deletion for that copy are not set by this tool; "
+                  f"`.gitignore` it if this mesh should not keep transcripts.")
         elif kind == "ephemeral":
             print("**Source is ephemeral** — there is nothing to point at. The facts below "
                   "cannot be checked against the original.")

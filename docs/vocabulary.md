@@ -1,9 +1,10 @@
 # context-mesh — node & edge vocabulary (the schema)
 
-Status: **LOCKED v2.3** (v1 2026-06-25; v1.1–v1.3 2026-07-16; v2.0 2026-07-21 — the
+Status: **LOCKED v2.4** (v1 2026-06-25; v1.1–v1.3 2026-07-16; v2.0 2026-07-21 — the
 single-Hub collapse; v2.1 2026-07-30; v2.2 2026-08-03 — workflow routing deferred,
-domains under `domains/`; **v2.3 2026-08-04 — the mesh declares its own vocabulary
-version**, see Versioning). This is the controlled vocabulary — the type system of
+domains under `domains/`; v2.3 2026-08-04 — the mesh declares its own vocabulary
+version; **v2.4 2026-08-06 — the PII policy is removed**, see Versioning).
+This is the controlled vocabulary — the type system of
 the knowledge graph. It is the schema the rest of the system references:
 [ingestion-pipeline.md](ingestion-pipeline.md) stages 2–3 classify into these types and
 [file-taxonomy.md](file-taxonomy.md) stores them. Changes here ripple everywhere —
@@ -305,11 +306,48 @@ frontmatter.
 
 ## Versioning
 
-This vocabulary is **v2.3**. Adding a type is a minor bump; changing an edge's legality or
+This vocabulary is **v2.4**. Adding a type is a minor bump; changing an edge's legality or
 removing a type is a major bump and requires updating every dependent doc. **Adding a
 required property to an existing type is a minor bump** — it constrains what a valid
 instance looks like without changing what the graph traverses. (This case was unspecified
 until v1.1 needed it.) The lock exists so ingestion and storage agree on one schema.
+
+### v2.4 (2026-08-06) — the PII policy is removed. **Breaking.**
+
+**`PII policy: strip | enrich` is gone from the Hub root index**, and with it stage 1b of
+ingestion. **Ingestion does nothing to a transcript before extracting from it** — no
+redaction, no anonymization, no substitution of speaker names. What arrives is what is read,
+and for `archived`, what is written.
+
+**Why.** The rule it replaced arrived on 2026-06-25 as an unexamined GDPR default and was
+never justified against the actual material. Transcripts come from meetings whose participants
+are internal or have consented to recording, so the liability framing did not hold — and
+`strip` was the *default*, so the safe-looking option was also the lossy one.
+
+**The deeper correction is about what kind of thing this is.** Normalizing a transcript is a
+**quality** concern, not a privacy posture. The useful version of it *resolves* a speaker who
+appears as "Sarah", "Sarah K." and "SK" to one person; `strip` merely replaced all three with
+a label, discarding the signal instead of fixing it. Framed that way the axis is **how much
+correction happens before extraction** — none, destructive, or corrective — and only the third
+is worth building. It belongs in a **pre-pass** (the slot `structure-transcript` occupies),
+never buried in ingestion.
+
+| Change | Detail |
+|---|---|
+| Remove | `PII policy:` line from the Hub root index's Identity block |
+| Remove | `ingest-conversation` stage 1b (sanitize) |
+| Remove | the `## PII policy` section from `prompts/structure-transcript.md` |
+| Change | `archived` now stores the transcript **as received**, not a sanitized copy |
+
+**Retention moved to where it belongs.** Through v2.3 the pipeline decided what a team's
+transcripts could contain. Now the team decides whether to keep them at all: `.gitignore` is
+the lever, applied to a repo they own. A pipeline that quietly rewrites someone's content is a
+worse answer than one that stores it honestly and lets them choose.
+
+**No `Conversation` property changed**, so nothing already ingested is invalid — this is
+breaking because a *behaviour* and a declared setting were removed, not because stored data
+became wrong. A mesh whose root index still carries a `PII policy:` line is migrated by
+removing that line; the migration is index-only.
 
 ### v2.3 (2026-08-04) — the mesh declares its own vocabulary version. **Additive.**
 

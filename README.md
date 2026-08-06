@@ -91,10 +91,6 @@ Finds or declares each **index** (Hub root and per domain) — the routing input
 one. It does *not* generate context files; it reports which are missing. A stub the index lists
 but that says nothing is worse than an honest gap.
 
-It also records the mesh's **PII policy** on the Hub root index — `strip` (the default: redact
-speaker identity) or `enrich` (preserve who-said-what, and take on the client + DPO custody that
-implies). Both `structure-transcript` and `ingest-conversation` read it.
-
 ### `structure-transcript` — clean up a raw transcript (optional pre-pass)
 
 Turns a raw transcript from *any* source into a clean, topically-labeled one: merged speaker
@@ -120,7 +116,8 @@ handles a raw transcript directly.
 transcript → distilled typed chunks → proposed placements → checkpoint → validated → staging
 ```
 
-- **Distill & sanitize** the transcript into durable facts; the raw copy isn't kept.
+- **Distill** the transcript into durable facts. The transcript itself is not modified, and
+  isn't kept unless nothing else would hold it.
 - **Type each fact** (domain fact, requirement, open question, to-do…) — the type decides where
   it may go.
 - **Propose a home** per fact, reading *only the indexes*. If the index can't place it, that's
@@ -140,7 +137,7 @@ records stay in staging). Edits to the same file are batched into one reviewed c
 
 ### Using it, start to finish
 
-1. **Once, then again to add a domain:** `setup-mesh`. Sets the PII policy while you're there.
+1. **Once, then again to add a domain:** `setup-mesh`.
 2. **After a meeting, if the transcript is raw and messy** (a Zoom/Meet/Teams export, not
    pre-structured): run `structure-transcript` first for a clean, labeled version — or paste
    `prompts/structure-transcript.md` into whatever tool holds the transcript. Optional — skip it

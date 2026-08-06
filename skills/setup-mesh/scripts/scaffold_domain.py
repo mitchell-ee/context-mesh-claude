@@ -43,7 +43,7 @@ DOMAINS_DIR = "domains"
 # The vocabulary version this scaffold writes into a new root index's `Mesh vocabulary:` line.
 # Bump it when a vocabulary change lands, and ship a migration alongside -- see
 # `migrations/README.md`. The marker prompts; it never selects (guards key on data shape).
-VOCABULARY = "v2.3"
+VOCABULARY = "v2.4"
 
 # Directories every container gets. Empty ones are honest: nothing routes to a dir.
 #
@@ -138,7 +138,6 @@ Read it first; load only what the current task needs. Do not load the whole mesh
 - **Role:** AI Hub — the one repo where all context lives
 - **Owns:** cross-cutting canonical context — the context that belongs to everybody
 - **Mesh vocabulary:** {vocabulary}
-- **PII policy:** strip
 
 <!-- Mesh vocabulary is the schema version this mesh's content is written in. Setup reads it
      to tell whether the mesh predates a convention change, and prompts if it does. It is a
@@ -146,11 +145,10 @@ Read it first; load only what the current task needs. Do not load the whole mesh
      inspecting the data, so a mesh with no marker, or one already fixed by hand, still
      behaves correctly. Setup rewrites this line only after the data actually checks out. -->
 
-<!-- PII policy is read by the transcript structurer (prompts/structure-transcript.md) and by
-     ingest-conversation. `strip` (the default) redacts speaker identity; `enrich` preserves
-     who-said-what and takes on client + DPO custody obligations (consent, retention,
-     right-to-erasure). Secrets and non-participant PII are redacted under either policy. Do
-     not switch to `enrich` without a deliberate data-custody decision. -->
+<!-- There was a `PII policy: strip | enrich` line here through v2.3. It is gone (v2.4):
+     ingestion does nothing to a transcript before extracting from it. Retention is the
+     team's decision about their own repo -- a mesh that does not want transcripts in its
+     history can .gitignore them. -->
 
 ## Domains
 

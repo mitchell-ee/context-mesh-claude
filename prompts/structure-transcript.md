@@ -57,8 +57,8 @@ pleasantries are expected. That is what this pass is for.
 
 **A clean, labeled markdown transcript.** Not JSON, not a schema, not chunks. The shape:
 
-1. A short **participants** line if the speakers are identifiable (subject to the PII policy
-   below).
+1. A short **participants** line if the speakers are identifiable, naming them as the
+   transcript does.
 2. The body grouped into **topically-labeled segments**. Each segment is a `##` heading naming
    the topic in a few words, followed by the cleaned speaker turns for that stretch of
    conversation.
@@ -74,33 +74,20 @@ labeled transcript is exactly right and a bespoke schema is exactly wrong.
 Order segments in the order the conversation reached them. Do not reorder to look tidy; the flow
 is itself context.
 
-## PII policy — read the setting first
+## Do not redact anything
 
-There is a per-mesh setting that governs how speaker identity is handled. It lives on the
-**`PII policy:` line of the Hub root `context-index.md`**, and it is one of:
+**Keep speaker names exactly as the transcript gives them.** Do not replace them with role
+labels, do not anonymize, do not substitute. Who said what is content, and downstream stages
+rely on it.
 
-- **`strip`** (the default) — **redact speaker identity.** Replace real names with stable role
-  or generic labels (`PM:`, `Engineer A:`, `Speaker 1:`) consistently across the transcript.
-  Who-said-what structure is preserved; *who they actually are* is not.
-- **`enrich`** — **deliberately preserve and cleanly label who said what.** Keep real speaker
-  names and roles. This is a choice to take custody of personal data: it carries client + DPO
-  obligations (consent, retention, right-to-erasure). If you are running under `enrich`, say so
-  plainly in your output so a human can see that identity was retained on purpose.
+This prompt had a `strip | enrich` PII policy through v2.3, and stripping identity was the
+default. It is gone. Cleaning a transcript and redacting one are different jobs, and only the
+first belongs here: **you are normalizing the text, not policing it.** If a transcript's
+speakers need resolving or disambiguating — the same person appearing as "Sarah", "Sarah K."
+and "SK" — that is a *correctness* improvement, and a legitimate future extension of this
+prompt; replacing them all with `Speaker 1` is not.
 
-If you cannot read the setting (you are running outside the mesh — e.g. pasted into a meeting
-tool), **default to `strip`** and note that you defaulted.
-
-**Two things are redacted under *either* policy, always:**
-
-- **Secrets** — keys, tokens, passwords, connection strings. Never preserved, never labeled.
-- **Non-participant PII** — names, emails, phone numbers, addresses, account numbers, and
-  customer identifiers for people who are *not* speakers in this conversation. `enrich` preserves
-  *participant* identity; it does not license leaking third parties.
-
-You are a **first-pass** sanitizer, not the last one. The transcript may pass through this
-prompt entirely outside the mesh's control, so ingestion sanitizes again unconditionally. Flag
-anything you are unsure about rather than silently keeping it — a later pass can always redact
-more, but it cannot un-leak what you let through.
+Retention is decided by whoever owns the repo the transcript lands in, not by this prompt.
 
 ## Worked example
 
@@ -117,31 +104,32 @@ more, but it cannot un-leak what you let through.
 [00:06] Sarah Chen: maybe. not sure a DLQ is the right call yet
 ```
 
-**Clean labeled out (under `strip`):**
+**Clean labeled out:**
 
 ```
-**Participants:** PM, Engineer
+**Participants:** Sarah Chen, Mike
 
 ## Refund failure handling
 
-**Engineer:** Right now when a refund fails, we retry it three times and then give up.
+**Mike:** Right now when a refund fails, we retry it three times and then give up.
 
-**PM:** And the customer never hears anything — which is the actual problem.
+**Sarah Chen:** And the customer never hears anything — which is the actual problem.
+The API key is sk_live_9f2a... by the way, rotate that.
 
-**Engineer:** I think we need a dead-letter queue, or something like it.
+**Mike:** I think we need a dead-letter queue, or something like it.
 
-**PM:** Maybe — I'm not sure a DLQ is the right call yet.
+**Sarah Chen:** Maybe — I'm not sure a DLQ is the right call yet.
 ```
 
-What happened: the pleasantry about the game was dropped; each speaker's fragmented lines were
-merged into single turns; real names were replaced with role labels (`strip`); the leaked API
-key was redacted entirely (removed under either policy). The disagreement about the DLQ was
-**kept as spoken** — it is not this prompt's job to decide whether it is settled. That call
-belongs to ingestion.
+What happened: the pleasantry about the game was dropped, and each speaker's fragmented lines
+were merged into single turns. **Names were kept as spoken**, and so was the aside about the
+API key — this prompt removes nothing, and an aside that reads as noise here may be the one
+durable fact in the meeting (someone needs to rotate that key). The disagreement about the DLQ
+was **kept as spoken** too — it is not this prompt's job to decide whether it is settled. That
+call belongs to ingestion.
 
-Under `enrich`, the only difference would be that the participant names are retained
-(`**Mike:**`, `**Sarah Chen:**`) and the output notes that identity was preserved on purpose —
-the API key is still redacted.
+The judgment being exercised is *"is this the same utterance, said more cleanly?"* — never
+*"should this have been said?"*
 
 ## What this does NOT do
 
@@ -149,7 +137,8 @@ the API key is still redacted.
 - **No decided/undecided call.** It keeps disagreements and open threads as spoken.
 - **No routing.** It knows nothing about domains, indexes, or where anything will live.
 - **No vocabulary.** It never touches the mesh schema.
-- **Not the sole sanitizer.** It is a first pass; ingestion sanitizes again, unconditionally.
+- **No redaction.** It removes nothing — not names, not secrets, not asides. It normalizes
+  wording; it never decides what should have been said.
 - **No bespoke output format.** The result is a readable labeled transcript, nothing a
   downstream tool has to special-case.
 
