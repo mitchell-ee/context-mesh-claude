@@ -124,7 +124,8 @@ transcript → distilled typed chunks → proposed placements → checkpoint →
   reported, not fudged.
 - **Dedup & conflict-check** against the one chosen target file: already there → skip; says the
   opposite → flag.
-- **Checkpoint** — every placement, least-confident first; you `approve` / `retry` / `drop`.
+- **Checkpoint** — every placement, grouped by destination file with the riskiest group
+  first, then you pick how to review them; `approve` / `retry` / `drop`.
   This is the gate.
 - **Write to staging** on approval. No PR (see below).
 

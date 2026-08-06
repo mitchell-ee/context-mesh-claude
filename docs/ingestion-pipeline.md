@@ -36,7 +36,7 @@ how it gets *populated*.
  [3.5] DEDUP ───────────► read ONLY the targets [3] chose: drop duplicates, flag
     │                      contradictions. (Added 2026-07-16 — see the dedup question below.)
     │
- [4] HUMAN GATE ────────► in-run checkpoint — every placement, least-confident first;
+ [4] HUMAN GATE ────────► in-run checkpoint — grouped by destination, riskiest first;
     │                      approve / retry N / drop N. THE gate: catches bad ROUTING while
     │                      the transcript is still in context and a retry is cheap. No PR
     │                      here — staging is private and each run writes new, unique-ID files.
@@ -141,11 +141,16 @@ chunks carry their `OpenQuestion`s and route through the guided-resolution flow 
 can be promoted.
 
 ### Stage 4 — Human validation gate (the in-run checkpoint)
-- An interactive surface (Slack, an LLM console, a terminal list — harness-agnostic) walks
-  the human through each proposed placement, **least-confident first**, *before* anything is
-  written and while the transcript is still in context.
-- Per chunk: **approve** (take as-is), **retry N [reason]** (re-propose with a correction —
-  cheap here because the source is still in hand), or **drop N** (discard).
+- An interactive surface (Slack, an LLM console, a terminal list — harness-agnostic) shows
+  the human what the run produced *before* anything is written and while the transcript is
+  still in context: counts by type, then the placements **grouped by destination file**, with
+  groups ordered by their **riskiest member** and each chunk's confidence shown inline.
+- **Then it asks how they want to read them** — group by group, as one async review file, or
+  risky-first with the depth on request. The modes differ in *depth*, never in coverage: every
+  chunk is named in all of them. The async mode costs the retry loop (the transcript is gone
+  once the run ends), and that trade is stated before it is chosen.
+- Per chunk: **approve** (take as-is), **retry `<id>` [reason]** (re-propose with a correction
+  — cheap here because the source is still in hand), or **drop `<id>`** (discard).
 - The human is an editor, not an author — the agent did the routing work; the human
   corrects and confirms. Batch-approve high-confidence chunks to keep throughput up.
 - Nothing is written to the graph until this gate passes. **This is the whole human gate for
@@ -272,9 +277,9 @@ with the rest of the workflow layer.
   PR-review). Andy left this open.
 
   **Answered 2026-07-16, revised 2026-07-20: ingestion has one gate — the in-run checkpoint.**
-  The built skill stops at a scannable list, least-confident first, `approve` / `retry N` /
-  `drop N`, *before anything is written*, while the transcript is still in context and a retry
-  costs a sentence. On approval it writes **straight to staging — no PR**. An earlier cut
+  The built skill stops at a scannable overview grouped by destination file, `approve` /
+  `retry <id>` / `drop <id>`, *before anything is written*, while the transcript is still in
+  context and a retry costs a sentence. On approval it writes **straight to staging — no PR**. An earlier cut
   opened a staging PR as a second surface, but it did neither job a PR is for: no concurrency
   (each run writes new, unique-ID files) and no new review (the checkpoint already saw the same
   placements). **The PR gate belongs at promotion**, where existing canonical documents are
@@ -283,8 +288,12 @@ with the rest of the workflow layer.
 
 - **Confidence threshold for batch-approve:** tune later against real transcripts.
 
-  **Reframed 2026-07-16 — confidence orders, it does not filter.** The
-  checkpoint shows *every* placement, sorted least-confident first, so risky items are read
-  while attention is freshest. A threshold that hid high-confidence chunks would hide exactly
-  the failure that matters most: a placement the agent was **confidently wrong** about.
+  **Reframed 2026-07-16 — confidence orders, it does not filter.** A threshold that hid
+  high-confidence chunks would hide exactly the failure that matters most: a placement the
+  agent was **confidently wrong** about.
+  **Extended 2026-08-06 — confidence now sets order *and depth*, still never visibility.**
+  Placements are grouped by destination file (how a document is actually reviewed, and how
+  promotion batches), groups sort by their riskiest member, and each chunk shows its own
+  confidence. The reviewer picks how deeply to read, but **every mode names every chunk** — the
+  depth control is theirs to operate, not a filter the skill applies.
   Full visibility, prioritized — not a subset.

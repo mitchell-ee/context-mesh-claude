@@ -313,20 +313,55 @@ that is a separate human act.
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/ingest-conversation/scripts/render_checkpoint.py" <placements.json>
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/ingest-conversation/scripts/render_checkpoint.py" <placements.json> --full
 ```
 
-Show the human every proposed placement, **ordered least-confident first**, and stop.
+**Two steps: show the shape, then ask how they want to read it.** Do not dump 26 chunk
+bodies at someone who has not yet seen what the run produced.
 
-**Show all of them, always.** Confidence sets the *order*, never what's visible — a
+**1. The overview** (the default invocation) gives them, before any detail:
+
+- **how many chunks need approval, broken down by type** — and that `Conversation` nodes are
+  provenance roots, so they are *not* reviewed. Say it, or the numbers look like a bug.
+- **a table grouped by destination file** — chunk count, the group's lowest confidence, and
+  the chunk IDs (consecutive runs collapse: `k-0001-0004`).
+- **which chunks need their eye** — the low-confidence and flagged ones, by ID.
+
+**Grouped by destination, because that is how a document gets reviewed.** Everything landing
+in `technical/integration-map.md` is one judgment about one file, and it is how promotion
+batches later too.
+
+**Risk still leads, through the group order.** Groups sort by their *riskiest member*, and
+every chunk carries its own confidence inline. The `Lowest` column says why a group sits
+where it does — otherwise a 3-chunk group above a 6-chunk one looks arbitrary.
+
+**2. Ask how they want to review**, and honour the answer:
+
+| Mode | What you do |
+|---|---|
+| **1 — live, one group at a time** | Full bodies for one destination file; take approve/retry/drop; then the next group. |
+| **2 — async, one review file** | Write every chunk in full to a single markdown file for them to read at their own pace. |
+| **3 — live, risky first, depth on request** | Flagged and low-confidence chunks in full; the rest listed by ID/title/target, and they pull any into full view. |
+
+**Mode 2 costs the retry loop, and you must say so before they choose it.** The transcript is
+discarded when the run ends, so `retry` stops being available once they leave. A placement
+they dislike later is a **hand-edit against a transcript that no longer exists**, not a
+re-proposal. Modes 1 and 3 keep the run live, where a retry is nearly free. Either offer to
+hold the run open, or state the trade plainly.
+
+**Nothing is hidden in any mode.** Confidence sets *order* and *depth*, never visibility — a
 placement marked high-confidence and wrong is precisely the failure that matters, and a
-filter would hide exactly that. Ordering gives full visibility while making the risky ones
-impossible to miss.
+filter would hide exactly that. Every mode at minimum **names every chunk** with its target
+and confidence. Mode 3 is a depth control the reviewer operates, not a filter you apply.
 
-They can:
+Whatever the mode, they can:
 
 - **approve** → validate, then write to staging (Stage 5)
-- **retry N [reason]** → re-propose chunk N with their correction
-- **drop N** → discard chunk N
+- **retry `<id>` [reason]** → re-propose that chunk with their correction
+- **drop `<id>`** → discard that chunk
+
+Address chunks **by ID**, not by position — the list is grouped now, so a positional index
+means something different depending on which group is on screen.
 
 **This checkpoint is the human gate — there is no later PR into staging.** It has to be here,
 because right now the transcript is still in context and re-proposing is nearly free. After
@@ -411,7 +446,8 @@ The facts now sit in staging, waiting for a separate, human-initiated promotion.
 2  distill                typed chunks, decided/undecided, most of the transcript discarded
 3  propose placements     INDEXES ONLY -- target + legal edges + confidence
 3.5 dedup                 read ONLY the targets routing chose; drop dupes, flag conflicts
-4a checkpoint             show everything, least-confident first; approve / retry / drop  (THE human gate)
+4a checkpoint             overview grouped by destination (riskiest group first), then
+                          the reviewer picks a mode; approve / retry <id> / drop <id>  (THE human gate)
 4b validate               legal-edge matrix; must pass
 5  write to staging       approved chunks -> staging/candidates/ -> commit  (no PR; PR is at promotion)
 ```
