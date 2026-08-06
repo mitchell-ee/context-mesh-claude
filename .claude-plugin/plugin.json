@@ -1,7 +1,7 @@
 {
   "name": "ee-context-mesh",
   "displayName": "EE Context Mesh",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Structure for where LLM context lives across an organization, plus the process for populating it from conversations — an AI Hub, a locked node/edge vocabulary, and Claude skills to ingest transcripts into staged, human-gated context.",
   "author": {
     "name": "Mike Mitchell",

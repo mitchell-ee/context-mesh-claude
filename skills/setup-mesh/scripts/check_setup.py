@@ -164,11 +164,33 @@ def main():
             f"this is expected: fill the index in before ingesting here.")
 
     # 3. Does what it lists exist?
+    #
+    # A listed-but-missing file is a PENDING HOME, not a failure. The index row is a human's
+    # declaration of *where this kind of context goes*, made before anyone wrote it -- it
+    # never claimed the home was occupied. Promotion creates the file when it has content
+    # for it (and updates the row), so this is a note about work not yet done, not a break.
+    #
+    # This used to be a `problem`, which withheld READY and blocked ingestion. That applied
+    # the "never create an empty context file" rule at the wrong moment: setup must not
+    # invent files, but the index legitimately lists files nobody has written yet.
+    #
+    # The cost of the change, stated honestly: a pending home and a TYPO'd path are the same
+    # shape, and neither blocks now.
+    #
+    # NOTHING AUTOMATED CATCHES THE TYPO. `check_references.py` walks edges, not index rows,
+    # so it passes a misspelled row exactly as it passes a real pending home. The guard that
+    # remains is narrower than it sounds: promotion may only create a file for a row that
+    # ALREADY EXISTED, so a typo cannot be invented and then self-certified in one motion --
+    # but a human who typed the row wrong still gets a file at the misspelling.
+    #
+    # So this note IS the check. It names the paths and asks a person to read them, which is
+    # why the verdict below states the count rather than passing silently.
     missing = find_missing(listed, repo)
     for p in missing:
-        problems.append(
-            f"Index lists `{p}` but the file does not exist. Ingestion will route facts to "
-            f"it and they will land in a vacuum. Remove the entry, or create the file.")
+        notes.append(
+            f"Index lists `{p}` but it has not been written yet -- a pending home. Promotion "
+            f"will create it when it has content for it. If the path is a typo, nothing else "
+            f"will catch that, so check it here.")
 
     # 4. Present but unlisted -- invisible to routing.
     #
@@ -240,10 +262,19 @@ def report(repo, problems, notes):
         # vacuously true of an empty list, which is precisely how fail-open #9 read as a
         # pass -- so an index that lists nothing gets its own wording.
         empty = any("lists no context files" in n for n in notes)
+        pending = sum(1 for n in notes if "a pending home" in n)
         if empty:
             print("READY to run -- but NOTHING TO ROUTE TO. The index exists and nothing in "
                   "it is broken, because it lists nothing (see notes). Ingestion will report "
                   "every fact as having no home until the index lists a file.")
+        elif pending:
+            # Say the count out loud rather than a bare READY. These rows are legitimate
+            # (promotion fills them), but a typo has the same shape, and the number is the
+            # only prompt a human gets to look.
+            noun = "is a PENDING HOME" if pending == 1 else "are PENDING HOMES"
+            print(f"READY. An index exists and it lists context files. {pending} of them "
+                  f"{noun} -- declared but not yet written (see notes). That is a normal "
+                  f"state; promotion creates them. Check they are not typos.")
         else:
             print("READY. An index exists, it lists context files, and those files are real.")
         print()

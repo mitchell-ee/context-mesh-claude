@@ -57,6 +57,9 @@ merged around. The classifier flags this.
 
 For each batch:
 
+0. **If the target file does not exist, create it** — see below. A listed-but-missing file is
+   a **pending home**, not an error: the index row is a human's declaration of *where this
+   kind of context goes*, made before anyone wrote it. Promotion is what fills it.
 1. **Read the target file.** Where does each claim belong — which section, and does it
    extend, qualify, or replace what's there?
 2. **Draft the merged result.** Write it as if it had always been there: the target is
@@ -71,6 +74,55 @@ For each batch:
 
 **Never silently drop a claim.** If two candidates in a batch conflict *with each other*,
 that is the same problem as a `contradicts` — surface it, don't pick.
+
+### Creating a pending home
+
+**A row in the index whose file does not exist is a declaration, not a defect.** The index
+says where a kind of context belongs; it does not claim the home is occupied. Setup
+deliberately never creates context files — an empty file it wrote would read as *answered*
+when nothing has been answered. Promotion is different: it has **content in hand**, so the
+file it creates says something the moment it exists.
+
+**The guard, and it is the important part:**
+
+> **Create the file only if the index row already existed before this run.** Never create a
+> file *and* the row that justifies it in the same motion.
+
+Creating the file satisfies a human's declaration. Creating both would be the tool inventing
+its own target — and it would make a typo self-certifying: a row reading
+`technical/sytem-behavior.md` would get a file created at the misspelling, and the index then
+updated to confirm it exists. Nothing would ever report the error. **If the target has no
+index row, that is `NO-HOME`** and the fix is upstream, unchanged.
+
+**Follow the conventions already in the repo — do not invent a house style.** In order:
+
+1. **Sibling files in the same directory** are the strongest signal. A new
+   `technical/system-behavior.md` should look like the `technical/repo-overview.md` beside
+   it: same frontmatter keys, same heading depth, same presence or absence of an H1.
+2. **The index row's *About* text** gives the title and framing — it is what a human already
+   said this file is for.
+3. **If there are no siblings, say so** and use the plainest possible shape: an H1 from the
+   *About* text, and the content. Do not import a convention from another domain, and do not
+   invent frontmatter no neighbouring file has.
+
+**State what you inferred**, at the PR, so a human can correct it: which sibling you patterned
+it on, or that there was none.
+
+### Updating the index
+
+A file that now exists is a different state from one that was only declared, and **the index
+is the routing input** — leaving it stale means the next run re-derives the same "missing"
+finding forever.
+
+**The row change goes in the same PR as the content, and is called out in the summary.**
+Not a silent rewrite: a tool editing the routing input without comment is exactly how a
+manifest drifts away from what the team thinks it says. The PR summary says plainly:
+
+> Created `technical/system-behavior.md` (pending home, declared in the index but never
+> written), patterned on `technical/repo-overview.md`. Marked present in `context-index.md`.
+
+If the index row already reads as present and correct, there is nothing to update — say that
+rather than touching the file.
 
 ## CONTRADICTS — stop
 

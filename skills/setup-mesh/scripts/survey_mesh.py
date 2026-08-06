@@ -142,10 +142,15 @@ def survey_one(repo, hub=False, hub_root=None):
     listed = check_setup.find_listed_files(index_text)
     # A domain's links up to the cross-cutting root stay inside the Hub, so they ARE
     # checkable; only links escaping the Hub entirely are skipped.
+    # A listed-but-missing file is a PENDING HOME, not a break -- the row declares where a
+    # kind of context goes, and promotion creates the file when it has content for it. This
+    # was a `problem` (and so BLOCKED the domain) until 2026-08-06; it is a note now, and the
+    # checker's wording is the single source of truth for how it reads.
     missing = check_setup.find_missing(listed, repo, root=hub_root or repo)
-    for p in missing:
-        problems.append(f"Index lists `{p}` but it does not exist -- facts would route "
-                        f"into a vacuum.")
+    if missing:
+        notes.append(f"{len(missing)} pending home(s) -- listed in the index, not yet "
+                     f"written: {', '.join('`' + p + '`' for p in missing)}. Promotion "
+                     f"creates them. Check none is a typo.")
 
     # Two different kinds of missing thing, and conflating them is what makes a survey
     # useless at scale:
@@ -280,7 +285,9 @@ def report_manifest(groups):
         if not g["tracked"]:
             print("    (nothing tracked — the index lists no context files)")
         for t in g["tracked"]:
-            print(f"    {'ok     ' if t['exists'] else 'MISSING'} {t['path']}")
+            # "pending", not "MISSING": the row is a declared home that nobody has written
+            # yet, which is a normal state promotion resolves -- not a broken link.
+            print(f"    {'ok     ' if t['exists'] else 'pending'} {t['path']}")
         for u in g["untracked"]:
             print(f"    unlisted {u}")
         print()
@@ -290,8 +297,12 @@ def report_manifest(groups):
     unlisted = [(g["label"], u) for g in groups for u in g["untracked"]]
 
     if missing:
-        print(f"MISSING ({len(missing)}) — tracked but not on disk. Facts routed here land")
-        print("  in a vacuum. Either create the file or remove the index row.")
+        # A declared home nobody has written yet -- normal, and promotion resolves it. The
+        # only reason to surface it is that a TYPO'd path has the identical shape and
+        # nothing downstream will catch one, so the list is the human's chance to look.
+        print(f"pending ({len(missing)}) — declared in an index, not yet written. Promotion")
+        print("  creates the file when it has content for it, patterned on its siblings, and")
+        print("  updates the index row in the same PR. Read the paths: a typo looks the same.")
         print()
     if unlisted:
         print(f"unlisted ({len(unlisted)}) — on disk but not tracked. Routing cannot see")
@@ -303,7 +314,8 @@ def report_manifest(groups):
         # is the normal state of a fresh scaffold, so it is not an error; but it must not
         # be reported in words that sound like a clean bill of health.
         if total:
-            print(f"All {total} tracked file(s) exist, and every context file is tracked.")
+            print(f"All {total} tracked file(s) exist, every context file is tracked, and")
+            print("nothing is pending.")
         else:
             print("NOTHING IS TRACKED anywhere in this mesh, so there is nothing to check.")
             print("Routing reads the indexes and only the indexes: until one lists a file,")

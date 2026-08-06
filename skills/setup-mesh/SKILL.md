@@ -106,8 +106,11 @@ the source from the actual input at stage 1 and confirms it. No config file.
 
 Read it and check it against reality:
 
-- **Listed but missing** — the index names a file that isn't there. Ingestion will route to it
-  and the write will land in a vacuum. **Report it.**
+- **Listed but missing** — a **pending home**, not an error. The row declares *where this kind
+  of context goes*; it never claimed the home was occupied. Promotion creates the file when it
+  has content for it, patterned on the file's siblings, and updates the row in the same PR.
+  **Report it as a note, never as a blocker** — but name the paths, because a typo'd row looks
+  identical and nothing downstream catches one.
 - **Present but unlisted** — a context file exists that the index doesn't name. Ingestion
   can't route to it, because routing reads the index only. **Offer to add it** — ask what it's
   about and when to load it; don't invent those.
@@ -155,8 +158,14 @@ and missing. Backtick them, one bullet each, with the reason:
 | State | Where it goes | Means |
 |---|---|---|
 | **Deliberate gap** | *Not in this mesh*, backticked | This file should never exist here |
-| **Pending home** | a context-table row, linked | Declared home; not written yet |
+| **Pending home** | a context-table row, linked | Declared home; not written yet. **Normal** — promotion fills it |
 | **Broken link** | a context-table row, linked | Was real, now missing — a genuine error |
+
+**The last two are still indistinguishable, and now neither blocks.** That is a deliberate
+trade: treating a pending home as broken was the worse error, because it made setup withhold
+READY over work that simply had not happened yet. The consequence is that a **typo in a row's
+path is not caught by anything** — promotion will create a file at the misspelling. The count
+in the verdict is the prompt to read the paths yourself.
 
 ## Migrations
 
@@ -234,8 +243,11 @@ asking would couple the mesh to a vendor.
 
 Exit 0 = ingestion can run. Exit 1 = it can't, or would misroute.
 
-**Blocked** means genuinely broken: no index, or the index lists files that don't exist —
-facts would route into a vacuum.
+**Blocked** means genuinely broken: **no index at all.** Routing reads the index and only the
+index, so without one the container is invisible.
+
+**A listed-but-missing file does not block** (changed 2026-08-06). It is a pending home, and
+promotion creates it.
 
 **An index that lists nothing is a note, not a blocker.** `scaffold_domain.py` deliberately
 writes an empty index (a container, never a claim), so calling its own output broken would
@@ -248,8 +260,8 @@ unreported before.
 
 **Always end by showing the manifest** — `survey_mesh.py <hub-root> --manifest`. It lists
 every file the indexes track, grouped by the Hub root and each domain, marking each `ok`,
-`MISSING` (tracked but absent — facts would route into a vacuum), or `unlisted` (present but
-invisible to routing).
+`pending` (declared but not yet written — promotion will create it), or `unlisted` (present
+but invisible to routing).
 
 Show it in full rather than summarizing. The triage output says what is *broken*; the
 manifest is how a human checks what is **right** — a file tracked under the wrong domain, or
@@ -261,6 +273,9 @@ Then say plainly:
 - What was declared, and what was already there.
 - **Which context files are missing** relative to the default manifest — as a *list for the
   humans*, not a to-do for the skill. Ingestion will report gaps honestly when it hits them.
+- **Which listed files are pending homes** — declared but not yet written. Say the paths out
+  loud, and say that promotion will create them. **This is the only place a typo'd row gets
+  looked at**, so it is a list to read, not a count to skim.
 - Whether the index actually lists anything yet — a scaffolded stub is set up but cannot
   receive a fact until someone fills it in.
 - **Any context routing cannot see** — a root-level directory holding an index, reported by

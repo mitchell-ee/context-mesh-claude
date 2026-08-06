@@ -76,8 +76,14 @@ Naming the gaps makes that honest instead of accidental.
 
 <!-- Three states share filename-shaped syntax and are NOT the same thing:
        deliberate gap  — this section, backticked: the file should never exist here
-       pending home    — a row in Canonical context: a declared home, not written yet
+       pending home    — a row in Canonical context: a declared home, not written yet.
+                         NORMAL. Promotion creates the file when it has content for it,
+                         patterns it on its siblings, and updates the row in the same PR.
        broken link     — a row in Canonical context whose file is gone: a real error
-     Only the first belongs in this section. -->
+     Only the first belongs in this section.
+
+     The last two are indistinguishable and neither blocks setup: a row whose path is a
+     TYPO reads exactly like a pending home, and promotion would create a file at the
+     misspelling. Nothing automated catches that -- read the paths when setup lists them. -->
 
 <Say **"None."** if nothing is deliberately excluded — an absent section is ambiguous.>
