@@ -34,8 +34,21 @@ hand.
 everybody) or *domain* (inside one domain folder, about one thing).
 
 A **domain** is a namespace, not necessarily a code repository: it may map 1:1 to one repo, span
-several, or be finer than one. **Code repos hold no context and are unaware of the mesh.** All
-Hub content, domain-specific included, is readable by everyone.
+several, or be finer than one. All Hub content, domain-specific included, is readable by
+everyone. The invariant is **one home per fact, authored once, never mirrored**.
+
+**Two things vary, and they are independent of each other:**
+
+- **The Hub may be its own repo, or it may be the code repo.** Across many repos it is usually
+  its own, and those code repos hold no context. **In a monorepo the Hub root is the repo
+  root** — `context-index.md` sits beside `package.json`, and Hub-relative paths are just
+  repo-relative paths.
+- **Domains are optional.** A Hub whose context is entirely cross-cutting has no `domains/`
+  directory at all, and that is a **complete mesh**. Nothing will report it as unfinished.
+
+A multi-repo product will probably carve domains; a monorepo usually won't, having one thing to
+describe. Either may do the opposite — there is one model with an optional layer, and no
+monorepo mode to configure.
 
 ### Cross-cutting — at the Hub root (shared, changes rarely)
 

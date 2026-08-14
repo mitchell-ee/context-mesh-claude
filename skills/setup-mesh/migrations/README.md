@@ -114,13 +114,18 @@ not idempotent, it is destructive — it will keep finding new things to "fix" o
 
 ## Changes that need no migration
 
-Not every breaking change leaves stale content behind. Two from v2.2 did not, and they are
-listed here so nobody writes a no-op file for them later:
+Not every breaking change leaves stale content behind. Three did not, and they are listed here
+so nobody writes a no-op file for them later:
 
-- **Parents became optional everywhere.** A pure loosening — content that specified a parent
-  is still valid, and content that omitted one was already being written. Nothing to fix.
-- **IDs widened to `0000`–`9999`.** Also a widening. Every existing four-digit ID remains
+- **Parents became optional everywhere** (v2.2). A pure loosening — content that specified a
+  parent is still valid, and content that omitted one was already being written. Nothing to fix.
+- **IDs widened to `0000`–`9999`** (v2.2). Also a widening. Every existing four-digit ID remains
   valid, and `0000` merely became legal where it had not been.
+- **`Domain` became optional, and the Hub may be the code repo** (v2.5). The largest loosening
+  so far and still nothing to migrate: a mesh with domains is unchanged, and a mesh without them
+  was *always* valid — v2.5 only stopped the prose and one verdict from calling it unfinished.
+  No content became wrong, so there is nothing for a guard to match. The fix shipped in
+  `survey_mesh.py`, not here.
 
 A convention change needs a migration only when **existing content becomes wrong**, not when
 it merely becomes non-mandatory.

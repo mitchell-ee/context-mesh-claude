@@ -24,7 +24,9 @@ add mode.
    `context-index.md`.
 2. **Prompt for which domains to set up.** No org query, no discovery, no membership file as
    input. A human names them. Adding a domain later means **running setup again** — the same
-   command, not a separate path.
+   command, not a separate path. **"None" is a complete answer** — domains are optional, and a
+   mesh whose context is all cross-cutting (the usual monorepo case) gets no `domains/`
+   directory and is finished. Don't ask twice, and don't suggest adding one later.
 3. **Per named domain,** create the directory skeleton and a domain `context-index.md`.
 4. **Migrate, if the mesh predates a convention change** — see below.
 5. **Report the aggregate** — which domains are ready, which need a human decision (an index

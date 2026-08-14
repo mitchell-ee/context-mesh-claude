@@ -8,6 +8,12 @@ every domain folder, and answers the only question that matters at onboarding sc
 READ-ONLY. Writes nothing, ever. `scaffold_domain.py` does the writing, and only for
 what this survey classifies as needing it.
 
+**Domains are optional.** A Hub with cross-cutting context and no `domains/` at all is a
+complete mesh, not a half-built one, and this survey must never report it as unfinished.
+Whether domains exist is a per-engagement decision independent of repo topology -- a
+multi-repo product will probably use them, a monorepo probably won't, and either may do
+the opposite. Nothing here infers the deployment shape from the domain count.
+
 Three states, and the middle one is the point:
 
   READY      an index exists and what it lists is real. Nothing to do.
@@ -168,7 +174,30 @@ def survey_one(repo, hub=False, hub_root=None):
     # A scaffolded-but-unfilled index: the container exists and the claims don't. This
     # is the state scaffolding deliberately leaves behind, and the survey is how a human
     # finds it again -- otherwise an empty index looks "set up" forever.
-    if "SCAFFOLD:" in index_text:
+    #
+    # BOTH conditions are required, and the marker alone was the bug this replaces:
+    # `SCAFFOLD:` lives inside the template's HTML guidance comments, which are meant to
+    # STAY (they carry the markdown-link rule). So the marker is present whether or not
+    # anyone filled the index in, and a fully populated index was reported as an empty stub
+    # FOREVER, with nothing the team could do to clear it short of deleting the guidance.
+    # Meanwhile check_setup read the same file, counted the links, and said READY -- two
+    # validators contradicting each other about one directory, which is this project's
+    # canary. Fail-CLOSED, not fail-open -- the inverse shape, and NOT one of the eleven.
+    # It survived because every hunt so far looked for validators reporting success while
+    # checking nothing; this one reported failure while checking the wrong thing. Worth
+    # sweeping for deliberately: a check no amount of correct work can clear.
+    #
+    # Do NOT strip comments before the marker check, tempting as the symmetry is:
+    # check_setup strips them for the vocabulary line and the link scan (fail-open #10),
+    # but this marker appears ONLY inside comments, by design. Stripping them makes the
+    # condition permanently false and this branch dead code -- a worse bug than the one
+    # being fixed, and one that looks like a principled consistency fix. Verified by
+    # running it: a pristine scaffold fell through to the `elif`.
+    #
+    # `listed` is what does the discriminating, and it is links, not table rows: how many
+    # distinct local paths the index points at. A table row without a markdown link is
+    # invisible here, deliberately (fail-open #9).
+    if "SCAFFOLD:" in index_text and not listed:
         asks.append("index entries (what each file is about, and when to load it)")
         notes.append("Index is a scaffold stub -- it lists nothing, so routing can see "
                      "nothing here. Honest, but empty until someone fills it in.")
@@ -374,11 +403,12 @@ def report(results, unreadable=()):
     print(f"Mesh survey: Hub root + {len(domains)} domain(s)")
     print()
 
-    if not domains:
-        print("  NO DOMAINS YET. The Hub holds only cross-cutting context so far. Add one")
-        print("  per thing you want context about: scaffold_domain.py <hub> <domain>,")
-        print(f"  which creates {DOMAINS_DIR}/<domain>/.")
-        print()
+    # Zero domains gets NO paragraph here. The header count line above says it, and a mesh
+    # with cross-cutting context only is a complete, valid mesh -- domains are optional
+    # (v2.5). This used to print "NO DOMAINS YET" plus instructions for adding one, which
+    # told a correctly-configured Hub it was unfinished. Silence is what "this is normal"
+    # looks like. The `unreadable` block below still fires for someone who DOES have
+    # domains, in the wrong place.
 
     if unreadable:
         # Deliberately NOT phrased as "these are domains". This says only what was checked:
@@ -437,13 +467,22 @@ def report(results, unreadable=()):
         # root (the pre-v2.2 layout) has exactly zero as far as this survey is concerned,
         # so a fully populated mesh printed this line and exited 0. That is the same shape
         # as the empty-index fail-open: a script parsing nothing and reporting success.
-        # Say which of the two situations it is.
+        #
+        # That risk is real, but zero domains is NOT the thing that signals it: domains are
+        # optional, so a root-only mesh is complete and gets a plain verdict (v2.5). What
+        # actually discriminates the two is `unreadable` -- an index sitting outside
+        # `domains/`, which is exactly what a pre-v2.2 mesh looks like from here, and which
+        # the block above has already reported in full. So key the caveat on that, not on
+        # the count. A silent zero-domain mesh and a silent zero-domain fail-open differ by
+        # whether anything unreadable was found, and nothing else.
         if domains:
             print(f"  Nothing. The Hub root and all {len(domains)} domain(s) are ready.")
         else:
-            print("  The Hub ROOT is ready -- but NO DOMAINS EXIST, so there is no domain")
-            print("  context to route to. If that is expected (cross-cutting context only),")
-            print("  nothing to do. If you expected domains here, see the note above.")
+            print("  Nothing. The Hub root is ready, and holds cross-cutting context only.")
+        if unreadable:
+            print()
+            print("  Read the note above before trusting that: context exists in this repo")
+            print("  that routing cannot see, so what is READY may not be what you meant.")
 
 
 if __name__ == "__main__":

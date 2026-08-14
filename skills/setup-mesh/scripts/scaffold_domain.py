@@ -43,7 +43,7 @@ DOMAINS_DIR = "domains"
 # The vocabulary version this scaffold writes into a new root index's `Mesh vocabulary:` line.
 # Bump it when a vocabulary change lands, and ship a migration alongside -- see
 # `migrations/README.md`. The marker prompts; it never selects (guards key on data shape).
-VOCABULARY = "v2.4"
+VOCABULARY = "v2.5"
 
 # Directories every container gets. Empty ones are honest: nothing routes to a dir.
 #
@@ -127,8 +127,12 @@ to decide that. A file not listed here is invisible to routing.
 
 ROOT_INDEX = """# AI Hub — context index
 
-The single repo holding all context. Cross-cutting context (shared by every team) lives at
-this root; everything specific to one thing lives in its **domain folder under `domains/`**.
+The one place all context lives. Cross-cutting context (shared by every team) lives at this
+root; anything specific to one thing lives in its **domain folder under `domains/`** — an
+optional layer, absent in a mesh whose context is all cross-cutting.
+
+This may be a repo of its own, or the code repo itself: **in a monorepo the Hub root is the
+repo root**, and this file sits beside the build manifest.
 
 **This file is the manifest, the routing input, and the progressive-disclosure contract.**
 Read it first; load only what the current task needs. Do not load the whole mesh.
@@ -154,7 +158,12 @@ Read it first; load only what the current task needs. Do not load the whole mesh
 
 <!-- SCAFFOLD: no domains yet. This list is the one piece of mesh-wide manifest that is
      not a file list: which domains exist is a per-engagement decision (one per code repo,
-     one per business domain, or a mix). Add a row per folder under `domains/`.
+     one per business domain, a mix, or NONE). Add a row per folder under `domains/`.
+
+     DOMAINS ARE OPTIONAL, and leaving this table empty is a complete answer. If all your
+     context is cross-cutting — the usual case for a monorepo, where there is one thing to
+     describe — there is no `domains/` directory and nothing is missing. Nothing will ask
+     you to add one.
 
      A domain is exactly a directory under `domains/` — nothing else is one, whatever it
      contains or is named. -->

@@ -5,8 +5,24 @@ description: Set up the AI Hub and its domain folders to receive ingested contex
 
 # Set up the Hub and its domains for ingestion
 
-**All context lives in the AI Hub — one repo.** Context about one thing lives in that thing's
-**domain folder under `domains/`**; code repos hold no context and are unaware of the mesh.
+**All context lives in the AI Hub — one repo.** Context is authored in exactly one place and
+never mirrored. Context about one thing lives in that thing's **domain folder under
+`domains/`**.
+
+**Two things vary, and neither is a mode to detect — just ask, or accept what you find:**
+
+- **The Hub may be its own repo, or it may be the code repo.** A multi-repo product usually
+  gives the Hub a repo of its own, and the code repos hold no context. In a monorepo the Hub
+  root **is** the repo root: `context-index.md` sits beside `package.json`, and Hub-relative
+  and repo-relative paths are the same thing. **Finding code in the Hub is not a
+  misconfiguration** and needs no comment.
+- **Domains are optional.** A Hub whose context is entirely cross-cutting — no `domains/`
+  directory at all — is a **complete mesh**, not a half-built one. Never tell a team with zero
+  domains that they have something left to do.
+
+These two are **independent**. A multi-repo product will probably use domains; a monorepo
+probably won't; either may do the opposite. Do not infer one from the other, and do not infer
+either from what the directory contains.
 
 Runs **once, then again to add a domain** — not per transcript. One job:
 
@@ -23,6 +39,10 @@ It is **committed** — a property of the domain and its team, the same for whoe
 it is idempotent, so there is no separate "add" mode
 ([setup-scope.md](../../docs/setup-scope.md)). Ask which domains to include — don't discover
 them, and don't maintain a membership list.
+
+**"None" is a complete answer to that question**, and the common one for a monorepo. Take it at
+face value: stand up the Hub root, create no `domains/` directory, and don't ask again or
+suggest adding one later. They can run this skill again if that changes.
 
 **Always check the Hub root.** Every run: if it has no `context-index.md`, stand it up first.
 
@@ -282,3 +302,8 @@ Then say plainly:
   the survey. Say what it is, and that nothing was moved. Never call it a domain: an index
   outside `domains/` is a fact about visibility, not a diagnosis of what the directory is.
 - **Whether the marker was stamped**, and if not, what still has to be true first.
+
+**Say nothing about a mesh having no domains.** The survey's header line reports the count and
+that is enough. Adding "you could add domains later" to a finished root-only setup reads as a
+correction, and there is nothing to correct — the survey deliberately stays silent here, so
+don't reintroduce the nag in the summary.

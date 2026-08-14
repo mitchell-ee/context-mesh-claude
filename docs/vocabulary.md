@@ -1,9 +1,10 @@
 # context-mesh — node & edge vocabulary (the schema)
 
-Status: **LOCKED v2.4** (v1 2026-06-25; v1.1–v1.3 2026-07-16; v2.0 2026-07-21 — the
+Status: **LOCKED v2.5** (v1 2026-06-25; v1.1–v1.3 2026-07-16; v2.0 2026-07-21 — the
 single-Hub collapse; v2.1 2026-07-30; v2.2 2026-08-03 — workflow routing deferred,
 domains under `domains/`; v2.3 2026-08-04 — the mesh declares its own vocabulary
-version; **v2.4 2026-08-06 — the PII policy is removed**, see Versioning).
+version; v2.4 2026-08-06 — the PII policy is removed; **v2.5 2026-08-13 — `Domain` is
+optional and the Hub may be the code repo**, see Versioning).
 This is the controlled vocabulary — the type system of
 the knowledge graph. It is the schema the rest of the system references:
 [ingestion-pipeline.md](ingestion-pipeline.md) stages 2–3 classify into these types and
@@ -186,13 +187,25 @@ tune, because there is no detection.
 (a `payments` domain covering payments-svc, ledger-svc, refunds-svc), or be finer than one.
 **Which domains exist is *manifest*** — per-implementation config, decided per engagement, the
 same treatment the context-file lists get ([file-taxonomy.md](file-taxonomy.md)). **That
-domains exist, are folders, and own their context exclusively is *framework*** and does not
-vary.
+domains, where they exist, are folders and own their context exclusively is *framework*** and
+does not vary.
+
+**Zero is a legal answer.** A mesh may have no domains at all — all of its context cross-cutting
+at the Hub root — and that is a complete mesh, not a half-built one. `Domain` is an optional
+layer of the vocabulary, not a required one: a mesh that never instantiates the type is using
+the schema correctly. Nothing may report an absent `domains/` as a gap.
+
+**Nor is the converse structural: the Hub is not necessarily *not* a code repository.** Where a
+product spans many repos, the Hub is usually its own; in a **monorepo the Hub root is the repo
+root**, with `context-index.md` beside the build manifest and Hub-relative paths identical to
+repo-relative ones. The two variables — where the Hub sits, and whether domains exist — are
+**independent**, and neither is inferred from the other or from a directory's contents.
 
 The rename from `Repo` is not cosmetic. `Repo` asserted a physical fact (this context sits in
-that git repository) that is no longer true — **code repos hold no context and are unaware of
-the mesh**. `Domain` asserts a logical one (this context is *about* that thing), which is what
-every edge actually meant.
+that git repository); `Domain` asserts a logical one (this context is *about* that thing), which
+is what every edge actually meant. Where the Hub is a separate repo, the code repos hold no
+context and are unaware of the mesh — a consequence of the invariant (**one home per fact, never
+mirrored**) under that deployment, not a rule of the schema.
 
 **Ownership is declared, not structural.** When context lived in many repos, "authored in
 exactly one place" was enforced by repo boundaries. In one Hub it is true by default, so
@@ -306,11 +319,53 @@ frontmatter.
 
 ## Versioning
 
-This vocabulary is **v2.4**. Adding a type is a minor bump; changing an edge's legality or
+This vocabulary is **v2.5**. Adding a type is a minor bump; changing an edge's legality or
 removing a type is a major bump and requires updating every dependent doc. **Adding a
 required property to an existing type is a minor bump** — it constrains what a valid
 instance looks like without changing what the graph traverses. (This case was unspecified
 until v1.1 needed it.) The lock exists so ingestion and storage agree on one schema.
+
+### v2.5 (2026-08-13) — `Domain` is optional; the Hub may be the code repo. **Additive.**
+
+**No type or edge changes.** Nothing in the schema is added, removed, or re-legalized. This
+entry records two things the vocabulary always permitted and its prose denied, both of which
+had already produced a bug.
+
+**1. A mesh may have zero domains.** All context cross-cutting at the Hub root, no `domains/`
+directory. `Domain` is an **optional layer** — a mesh that never instantiates the type is using
+the schema correctly, and nothing may report its absence as a gap. `survey_mesh.py` did: it
+printed *"NO DOMAINS YET"* with instructions for adding one, and closed with *"the Hub ROOT is
+ready — **but** NO DOMAINS EXIST."* Both told a complete mesh it was unfinished.
+
+**2. The Hub may be the code repo.** Where a product spans many repos the Hub is usually its
+own, and those code repos hold no context. **In a monorepo the Hub root is the repo root**:
+`context-index.md` beside the build manifest, Hub-relative paths identical to repo-relative
+ones. The structure, the tooling, and every path rule are unchanged.
+
+**The two are independent** — a multi-repo product will probably carve domains, a monorepo
+probably won't, and either may do the opposite. Nothing infers one from the other, or either
+from what a directory contains. There is no monorepo *mode* and no shape to detect.
+
+**Why the prose said otherwise.** *"Code repos hold no context and are unaware of the mesh"*
+described the seeding client's ~100-repo topology and got written as though it were framework.
+It is what the real invariant — **one home per fact, authored once, never mirrored** — looks
+like when the Hub is a separate repo. The pre-collapse design had it right — mono-repo and
+multi-repo were held to be *the same model, differing by exactly one path segment* — and
+resolving that "into the only case" meant the monorepo branch is the **only** branch. It was
+then read as its opposite for three weeks.
+
+| Change | Detail |
+|---|---|
+| Clarify | `Domain` is optional; zero domains is a complete mesh, never a gap |
+| Clarify | the Hub may be its own repo **or** the code repo; in a monorepo, Hub root = repo root |
+| Clarify | the two are independent; neither is inferred from the other |
+| Fix | `survey_mesh.py` no longer reports zero domains as unfinished |
+
+**Found while fixing it:** the survey's scaffold-stub check was **fail-closed** — it decided an
+index was an unfilled stub from a `SCAFFOLD:` marker that lives inside the template's
+*permanent* guidance comments, so a fully populated index reported as empty forever while
+`check_setup.py` called the same directory READY. Not one of the eleven fail-opens; the inverse
+shape, which is why hunting for validators-that-pass-while-checking-nothing never surfaced it.
 
 ### v2.4 (2026-08-06) — the PII policy is removed. **Breaking.**
 

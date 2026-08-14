@@ -115,7 +115,7 @@ flowchart TD
         RS[("staging/candidates/")]
     end
 
-    subgraph DOMS["domains/ — every domain, and nothing else is one"]
+    subgraph DOMS["domains/ — OPTIONAL · every domain, and nothing else is one"]
         direction LR
         D1["<b>domains/payments/</b><br/>context-index.md<br/>technical/ · product/<br/>staging/candidates/"]
         D2["<b>domains/notify/</b><br/>context-index.md<br/>technical/<br/>staging/candidates/"]
@@ -124,8 +124,8 @@ flowchart TD
     HUB --> ROOT
     HUB --> DOMS
 
-    CODE["Code repos<br/><i>hold no context · unaware of the mesh</i>"]
-    HUB -.->|"describes, never lives in"| CODE
+    CODE["Code<br/><i>a separate repo, or this same one</i>"]
+    HUB -.->|"describes"| CODE
 
     classDef stage fill:#e7f1ff,stroke:#2c5aa0,color:#000
     classDef ext fill:#eee,stroke:#888,stroke-dasharray:4 3,color:#000
@@ -150,8 +150,21 @@ guessed at, which reported a `docs/product/` research folder as a domain while m
 one.)
 
 **A domain is a namespace, not necessarily a code repository.** It may map to one repo, span
-several, or be finer than one. **Which domains exist is per-engagement config**; that they
-exist and own their context exclusively is fixed.
+several, or be finer than one. **Which domains exist is per-engagement config**; that they own
+their context exclusively, where they exist, is fixed.
+
+**Domains are optional, and so is the Hub having a repo to itself.** Two things vary, and they
+are independent of each other:
+
+- **Zero domains is a complete mesh.** If all your context is cross-cutting — the usual case
+  when there is one product to describe — there is no `domains/` directory and nothing is
+  missing. The tooling will not ask you to add one.
+- **The Hub may *be* the code repo.** With many repos, the Hub is usually its own and the code
+  repos hold no context. **In a monorepo, the Hub root is the repo root** — `context-index.md`
+  sits beside `package.json`, and Hub-relative paths are just repo-relative paths.
+
+So a monorepo mesh is typically the top half of the diagram above and nothing else: a root
+index, the cross-cutting folders, `staging/`. That is the whole structure, correctly set up.
 
 ### Canonical vs. staging
 

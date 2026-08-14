@@ -14,8 +14,24 @@ shape, staging — is framework and does not vary.
 ## Everything lives in the AI Hub
 
 **One repo holds all context.** Context about a specific thing lives in a **domain folder**
-inside the Hub — not in the code repo it describes. Code repos hold no context and are unaware
-of the mesh. All Hub content, domain-specific included, is readable by everyone.
+inside the Hub. All Hub content, domain-specific included, is readable by everyone.
+
+The invariant is **one home per fact, authored in exactly one place, never mirrored**. Two
+things around it vary per implementation, and neither changes the structure:
+
+**Where the Hub sits.** It may be its own repo, or it may *be* the code repo:
+
+| | The Hub is | Code repos |
+|---|---|---|
+| **Multi-repo product** | usually a repo of its own | hold no context; unaware of the mesh |
+| **Monorepo** | the code repo — Hub root *is* repo root | there is only the one, and it holds the mesh |
+
+In a monorepo, `context-index.md` sits beside `package.json`, and **Hub-relative and
+repo-relative are the same thing** — one path convention, no offset to reason about. Nothing in
+the structure or the tooling changes; the mesh does not detect which shape it is in, and code
+sitting in the Hub is not a misconfiguration.
+
+**Whether domains exist at all.** They are optional:
 
 ```
 hub/
@@ -25,7 +41,7 @@ hub/
   process/
   governance/
   staging/            # cross-cutting undecided material
-  domains/            # every domain lives here, and nowhere else
+  domains/            # OPTIONAL — every domain lives here, and nowhere else
     <domain>/         # everything about one domain
       context-index.md
       product/
@@ -33,10 +49,18 @@ hub/
       staging/
 ```
 
+**A Hub with no `domains/` directory is a complete mesh**, not an unfinished one — its context
+is entirely cross-cutting, and the root holds all of it. Tooling must never report zero domains
+as a gap.
+
+**The two are independent.** A multi-repo product will probably carve domains; a monorepo
+probably won't, having one thing to describe; either may do the opposite. Do not infer the
+domain layer from the repo topology, or either from what a directory contains.
+
 A **domain** is a namespace, not necessarily a code repository. It may map 1:1 to one repo, span
-several, or be finer than one. **Which domains exist is manifest** (per-engagement config);
-**that domains exist and own their context exclusively is framework**. See
-[vocabulary.md](vocabulary.md) `Domain`.
+several, or be finer than one. **Which domains exist — including none — is manifest**
+(per-engagement config); **that domains, where they exist, own their context exclusively is
+framework**. See [vocabulary.md](vocabulary.md) `Domain`.
 
 **A domain is exactly a directory under `domains/`** (v2.2, 2026-08-03). This is a *declaration
 by location*, not a heuristic: tooling never infers domain-ness from what a folder contains.
@@ -88,8 +112,10 @@ So the taxonomy splits in two:
 
 - **Add** a file the framework never anticipated (`technical/legacy-runtime-topology.md` for a
   migration engagement).
-- **Carve the domains** — one per code repo, one per business domain, or a mix. The framework
-  says domains exist and own their context; *which* ones is this client's call.
+- **Carve the domains** — one per code repo, one per business domain, a mix, or **none at all**
+  (a monorepo usually has one thing to describe, so all its context is cross-cutting). The
+  framework says that domains, where they exist, own their context exclusively; *which* ones
+  exist, including zero, is this client's call.
 - **Drop** a file this org has no use for (a team with no formal design practice drops
   `product/design-principles.md`).
 - **Rename** to match house vocabulary (`technical/nfr.md` → `technical/slos.md`).
@@ -477,15 +503,31 @@ manifest that is not a file list.
 
 ## Resolved (2026-07-21) — the single-Hub collapse
 
-- **Where domain-specific context lives: the Hub, in a domain folder.** Not in the code repo it
-  describes. Code repos hold no context and are unaware of the mesh. This replaced the
-  central-vs-repo-local axis with a cross-cutting-vs-domain one — a question about *what
-  context is about*, not *which repo it sits in*.
-- **Which domains exist is manifest**, alongside the file lists; *that* domains exist and own
-  their context exclusively is framework.
+- **Where domain-specific context lives: the Hub, in a domain folder.** Not in a *separate* code
+  repo that the mesh does not hold. This replaced the central-vs-repo-local axis with a
+  cross-cutting-vs-domain one — a question about *what context is about*, not *which repo it
+  sits in*.
+- **Which domains exist is manifest**, alongside the file lists; *that* domains, where they
+  exist, own their context exclusively is framework.
 - **Dissolved with the collapse:** the CI mirror (Layer B is authored where it lives, not
   copied), leaf→Hub promotion of discovery artifacts, the partitioned/uniform access model, the
   promotion allow-list, and the mono-vs-multi-repo question (there is one repo).
+
+> **Clarified 2026-08-13 — two things this section was read as saying, and doesn't.**
+>
+> "Code repos hold no context and are unaware of the mesh" described the *seeding client*, which
+> has ~100 microservice repos and a Hub of its own. It was written as though it were framework,
+> and it isn't: it is what the invariant (**one home per fact, never mirrored**) looks like
+> *when the Hub is a separate repo*. **In a monorepo the Hub root is the repo root**, code and
+> context sit in one repo, and the invariant holds unchanged. The pre-collapse design had
+> already worked this out — mono-repo and multi-repo were held to be *the same model, differing
+> by exactly one path segment* — and the collapse resolving that "into the only case" meant the
+> monorepo branch is the **only** branch, not that monorepos were ruled out.
+>
+> Separately: **domains are optional**, and their absence is independent of repo topology. A
+> monorepo usually has one thing to describe, so all of its context is cross-cutting and it has
+> no `domains/` at all. That is a complete mesh. Tooling that treats zero domains as an
+> unfinished state is wrong — `survey_mesh.py` did, and was fixed.
 
 ## Resolved (2026-06-25)
 
