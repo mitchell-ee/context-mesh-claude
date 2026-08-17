@@ -46,6 +46,30 @@ routing actually matches against — vague conditions produce vague routing.
 | [technical/system-behavior.md](technical/system-behavior.md) | <what it does at runtime: flows, orchestration> | <reasoning about runtime behavior or changing a flow> |
 | … | … | … |
 
+## Collections
+
+<A **collection** is a folder of same-typed files that nothing references individually —
+architecture decision records are the usual case. **One row for the folder**, never one row per
+member: per-member rows grow without bound and repeat the same description.
+
+The path is a **link ending in `/`** — the trailing slash is what tells a collection from a
+context file. `Members` is the naming pattern for a new member, one of `{slug}.md`,
+`{date}-{slug}.md`, or `NNN-{slug}.md`.
+
+A row here is a CLAIM THAT THE FOLDER EXISTS — a missing directory is an error, because
+nothing creates it for you. So the example below is commented out: uncomment it only once
+`decisions/` is real, and delete this section entirely if this mesh has no collections.
+
+If this mesh has none: say **"None."** explicitly, the same as Discovery artifacts below.>
+
+None.
+
+<!--
+| Collection | Members | About | Load when |
+|---|---|---|---|
+| [decisions/](decisions/) | `NNN-{slug}.md` | <architecture decision records — one decision per file> | <deciding something with precedent; revisiting a settled choice> |
+-->
+
 ## Discovery artifacts
 
 <If this team runs continuous discovery, list the OST folders and the current tree — titles

@@ -72,7 +72,7 @@ else needs deciding.
 
 ## How to read this
 
-Every file sits on two axes, plus two attributes that decide its storage mechanics:
+Every file sits on two axes, plus three attributes that decide its storage mechanics:
 
 - **Scope** — *Cross-cutting* (at the Hub root; governs everybody) vs. *Domain* (inside one
   domain folder; about that thing). **This replaces the old central-vs-repo-local axis**, which
@@ -80,9 +80,28 @@ Every file sits on two axes, plus two attributes that decide its storage mechani
   this about," not "where does it live" — everything lives in the Hub.
 - **About** — Product / Feature / Technical / Process & Governance.
 - **State** — *Canonical* (decided fact) vs. *Staging* (undecided; awaits promotion).
-- **Cardinality** — *Singleton* (one-off; referenced by **path**) vs. *Multi-sibling*
-  (many instances of a type; referenced by **ID** — see [[id-vs-path-references]] /
-  the path-vs-ID rule). This is what determines whether a thing is a file or a folder-of-files.
+- **Cardinality** — *Singleton* (one of it) vs. *Multi-sibling* (many instances of a type).
+  This is what determines whether a thing is a file or a folder-of-files.
+- **Addressing** — *Path* (referenced by where it sits) vs. *ID* (referenced by a stable
+  identifier the graph traverses — see [[id-vs-path-references]] / CLAUDE.md).
+
+**Cardinality and addressing are independent** (split 2026-08-17). They used to be a single
+axis that read *"Singleton — referenced by path; Multi-sibling — referenced by ID,"* which tied
+*how many there are* to *how you point at one* as though the pairing were necessary. It isn't,
+and the old wording was already wrong about a type in this document: **personas are
+multi-sibling and addressed by slug — a path, not an ID.** Splitting the axes describes them
+accurately and makes room for collections:
+
+| | **Path-addressed** | **ID-addressed** |
+|---|---|---|
+| **One** | Canonical singletons — `technical/system-behavior.md` | *(empty by design: an ID for a one-off earns nothing)* |
+| **Many** | **Collections** — `docs/decisions/`, `personas/` | **Discovery artifacts** — `OPP-NNNN`, `SOL-NNNN`, `STORY-NNNN` |
+
+The empty cell is deliberate, and the two "Many" cells are the useful part: they are the same
+*storage shape* — a folder of same-typed files, one file each, for progressive disclosure — and
+they differ in exactly one property, **whether anything traverses them**. That single
+difference is what puts one in the manifest and the other in the framework; see
+[what tells the three kinds apart](#what-tells-the-three-kinds-apart) below.
 
 Two source models fed this draft, one per side of the cross-cutting/domain split:
 - A real engagement's canonical context list (a legacy-platform migration) — **generalized
@@ -140,12 +159,19 @@ So the taxonomy splits in two:
 
 ### Why the line falls there
 
-The manifest covers **singletons referenced by path**; the framework covers **everything
-the graph reasons over**. A path-referenced singleton is inert as far as the type system is
+The manifest covers **everything addressed by path**; the framework covers **everything
+the graph reasons over**. A path-addressed file is inert as far as the type system is
 concerned — the index/loader lists it, an agent loads it, nothing validates its name. Adding
-or renaming one costs nothing structurally. Multi-sibling ID'd artifacts are the opposite:
+or renaming one costs nothing structurally. ID-addressed artifacts are the opposite:
 their folders, IDs, and parent chains are what the edges traverse. Change those and the
 routing logic changes with them.
+
+**The line is drawn by addressing, not by cardinality** (restated 2026-08-17; it used to read
+*"singletons referenced by path"*, which was true only while every path-addressed thing
+happened to be a singleton). A **collection** is many files and still manifest, because nothing
+traverses its members. **Personas are the exception that proves the rule** — a collection by
+shape, but framework, because `Story` files name personas *by slug*, so the slug is traversed
+and cannot be renamed freely.
 
 The lists below are therefore the **default manifest** — a "pretty good" starting set,
 generalized from one real engagement's context list plus the aiviz discovery structure.
@@ -178,12 +204,18 @@ grows enough to hurt progressive disclosure).
 > real practice's list will look substantially different from this one — these defaults were
 > generalized from **one** engagement plus the [ee-pm](https://github.com/mitchell-ee/ee-pm)
 > discovery practice, and both are particular.
+>
+> **Where context files already exist, they are the starting point — not this list.** These
+> defaults are a suggestion for a repo starting from scratch. A repo that already has a `docs/`
+> tree has already made these decisions, and setup's job is to **index what is there**, not to
+> reshape it toward this list. Setup may *recommend* what looks missing; recommending is not
+> creating, and the team decides.
 
 ### Product (cross-cutting)
 | File | About | Generalized from |
 |---|---|---|
 | `product/business-context.md` | Why this product/system exists; business problems solved; who depends on it; value delivered | "Business Context & Purpose" |
-| `product/personas/{slug}.md` | Customer/stakeholder personas — **one file each**, keyed by `slug`. See [Personas](#personas--one-file-each-keyed-by-slug) below: this is the one Layer-A entry that is *framework*, not manifest. | — |
+| `product/personas/{slug}.md` | Customer/stakeholder personas — **one file each**, keyed by `slug`. See [Personas](#personas--one-file-each-keyed-by-slug-revised-2026-07-30--framework-fixed) below: this is the one Layer-A entry that is *framework*, not manifest. | — |
 | `product/design-principles.md` | Product values and how tradeoffs get resolved | aiviz `principles.md`, ee-pm `principles.md` |
 | `product/glossary.md` | Domain terms, shared vocabulary | aiviz `glossary.md` |
 | `product/product-strategy.md` | Where the product is going: direction, bets, what it will and won't become | ee-pm |
@@ -223,11 +255,109 @@ for a team who doesn't.
 | `governance/ai-policy.md` | AI usage guidelines, AI-specific data rules, human-review triggers | "AI Usage Guidelines" + "AI-Specific Data Policies" |
 | `capabilities/skill-governance.md` | How skills/agents are proposed, tested, approved, versioned, retired; context-update policy | "Skill Lifecycle" + "Context Update Policy" |
 
+**Collections (cross-cutting)** — declared in the index's own `## Collections` table, not the
+File table above. See [Collections](#collections--a-folder-of-same-typed-files-addressed-by-path-added-2026-08-17--manifest-driven):
+
+| Collection | Members | About | Generalized from |
+|---|---|---|---|
+| `decisions/` | `NNN-{slug}.md` | Architecture decision records — one decision per file, with its context and consequences | a real product repo's `docs/decisions/`, 2026-08-17 |
+
+> **Decisions and open questions are the same thing at two lifecycle stages.** An open question
+> is an undecided point; an ADR is what it becomes once decided. They are not competing homes.
+> Open questions live **in the target context file** they concern (see
+> [Layer C](#layer-c--staging-undecided-material-at-the-root-and-per-domain--framework-fixed)),
+> and a decision durable enough to keep its reasoning lands in `decisions/`. Not every resolved
+> question earns an ADR — most just edit the file they sat in. `promote-candidate`'s `RESOLVE`
+> outcome covers the first; **`APPEND`** covers the second.
+
 > **Why these and not the source list's several dozen sections:** the source list mixes the
 > durable taxonomy with one engagement's specifics (legacy runtime topology, target-platform
 > details, migration playbook, coexistence routing). Those are *domain-local technical context
 > for that migration*, not the central canonical list. The generalization keeps the durable
 > categories and pushes engagement specifics down to Layer B.
+
+---
+
+## Collections — a folder of same-typed files, addressed by path (added 2026-08-17) — *manifest-driven*
+
+A **collection** is many files of one type in one folder, where **nothing traverses a member**.
+Architecture decision records are the motivating case: `decisions/001-gcp-dev-region.md`,
+`002-…`, `003-…` — all the same kind of thing, more arriving over time, and nothing anywhere
+points at a specific one.
+
+**One row for the folder, not one row per file.** Listing members individually grows the index
+without bound, makes every new member an index edit, and repeats a near-identical description
+as many times as there are files. A collection row says it once.
+
+### What tells the three kinds apart
+
+**Does anything follow a reference to a specific file in the folder?** That one question
+decides it, and it is the same question that makes personas framework:
+
+| Kind | Shape | Traversed? | Side |
+|---|---|---|---|
+| **Singleton** | one file | n/a | manifest |
+| **Collection** | folder of same-typed files | **no** | manifest |
+| **Discovery artifact** | folder of same-typed files | **yes**, by ID | framework |
+
+Collections and discovery artifacts are **the same storage shape** and differ only in that
+answer. A collection is inert: nothing validates a member's name, so the manifest may add,
+rename, or drop a collection freely. **Personas are a collection by shape but framework by
+traversal** — `Story` files name them by slug — which is why they get their own section below
+rather than being declared as one.
+
+### How a collection is declared
+
+In its own table under a `## Collections` heading in the index, **not** as a row in the File
+table. That table's contract is "one row, one document," and mixing cardinalities into it would
+force every consumer to branch per row:
+
+```markdown
+## Collections
+
+| Collection | Members | About | Load when |
+|---|---|---|---|
+| [docs/decisions/](docs/decisions/) | `NNN-{slug}.md` | Architecture decision records | deciding something with precedent; revisiting a settled choice |
+```
+
+- **Trailing slash, and it is load-bearing.** `docs/decisions/` vs. `docs/decisions.md` is how
+  a human and a parser both tell a collection from a singleton.
+- **Linked, not backticked.** This deliberately inverts the rule used by the *Staging* table
+  and *Not in this mesh*, where a folder is backticked precisely because it is **not** a
+  context home. A collection **is** one, so it follows the "a real row must be a link" rule.
+  Three rules in one family, and this is the third: link a real home, backtick a non-home.
+- **`Members` carries the naming convention**, from a **closed set** of three:
+
+| Pattern | Example member | Races? |
+|---|---|---|
+| `{slug}.md` | `gcp-dev-region.md` | no |
+| `{date}-{slug}.md` | `2026-08-17-gcp-dev-region.md` | no |
+| `NNN-{slug}.md` | `004-gcp-dev-region.md` | **yes** — see below |
+
+**The pattern is opaque to the type system.** It is used *only* to generate a name when
+promotion creates a member, and is **never parsed to read meaning out of an existing
+filename**. That is what keeps collections on the manifest side: the moment something extracts
+data from a member's name, the pattern has become schema and the collection has quietly become
+framework.
+
+### Rules
+
+- **An empty declared collection is a NOTE, not an error.** Same reasoning as a pending home:
+  the row declares *where a kind of context goes*, and never claimed the folder was occupied.
+- **A missing directory is an error.** The row points somewhere that does not exist.
+- **`NNN-{slug}.md` numbers at promotion time, by reading the directory.** Two promotions
+  running at once can therefore both claim `004`. **This is not solved**: promotion is expected
+  to run **single-threaded**, and that is a documented requirement of using this plugin rather
+  than something the tooling enforces. Discovery artifacts have had the identical race forever
+  (PMs allocate `OPP-NNNN` by hand) and it has never bitten. Prefer `{date}-{slug}.md` for new
+  collections, which cannot collide; use ordinals when matching an existing convention.
+- **Promotion may only add a member to a collection whose row already exists** — never the
+  member and its justifying row in one motion. Same guard as pending homes.
+
+> **A collection row is checked, and the check is separate from the singleton one.** The
+> singleton link parser requires a literal `.md`, which a trailing-slash path does not match —
+> so collections need their own parse and their own existence check (`isdir`, not `isfile`).
+> A verdict that speaks only of files must not be read as covering them.
 
 ---
 
@@ -440,14 +570,58 @@ human **promote** decision. aiviz already runs a working instance of this: the O
 `inbox/` holds candidate opportunities from discovery until a PM promotes them into the
 tree (`promote-from-inbox`).
 
-| File / folder | Purpose |
-|---|---|
-| `staging/inbox/{YYYY-MM-DD}-{source}.md` | Distilled chunks from a conversation, pre-routing |
-| `staging/candidates/` | Proposed nodes/edges awaiting human validation (the OST-`inbox` generalization) |
-| `staging/open-questions.md` | Unresolved decisions surfaced but not yet answered |
+| File / folder | Purpose | Created |
+|---|---|---|
+| `staging/inbox/` | **Drop location** for raw transcripts awaiting ingestion. Any filename. | lazily, on first drop |
+| `staging/inbox/processed/` | Transcripts ingestion has already read | lazily, on first ingestion |
+| `staging/candidates/` | Proposed nodes/edges awaiting human validation (the OST-`inbox` generalization) | by `scaffold_domain.py` |
 
 Staging mirrors the canonical structure: a candidate destined for `product/` waits in
 staging tagged for `product/`.
+
+**Only `staging/candidates/` is scaffolded** (reconciled 2026-08-17 — this table used to list
+three entries while setup created one, which read as a bug). The other two are created by the
+process that first writes to them, because setup creates *containers*, never a listed thing
+that says nothing.
+
+### `staging/inbox/` is a drop location, not a collection
+
+It has the same folder-of-files shape, and it is **deliberately not** a collection: a
+collection declares a naming pattern, and the inbox's requirement is the opposite — **process
+whatever is there, whatever it is called.** A human drops a transcript, or a meeting tool
+names it; forcing a pattern would make the drop location harder to drop into.
+
+That is the point of it. The inbox is the **vendor-neutral input path** — the same move as
+[prompts/structure-transcript.md](../prompts/structure-transcript.md). A watched folder is a
+substrate any tool can write to; an integration that reads one meeting product's API is a
+dependency. Ingestion never has to know where a transcript came from.
+
+**Processed transcripts move to `staging/inbox/processed/`**, so what has been read is visible
+on disk to everyone rather than inferred. **This does not violate "ingestion only ever adds"**
+— that invariant governs the **context layer**, which is what makes writing straight to staging
+with no PR safe. A raw transcript in a drop folder is *input*, not context, and moving it costs
+the invariant nothing.
+
+### Open questions live in the file they are about (changed 2026-08-17)
+
+There is **no `staging/open-questions.md`.** An unresolved question about runtime behaviour goes
+in an `## Open questions` section of `technical/system-behavior.md` — the file it concerns.
+
+- **Progressive disclosure works.** Whoever loads that file to reason about runtime behaviour
+  needs to know something about it is unsettled. In a central list they would never see it
+  without loading a file about everything.
+- **It reuses a decision already made.** "Which file is this about?" is what routing answers;
+  a separate questions file makes it a second, different decision with a second chance to be
+  wrong.
+- **Resolution stops being a move.** The question is already in the right file, so resolving it
+  edits it in place — an ordinary `MERGE`.
+
+**The cost, stated honestly:** "what is unresolved across the whole mesh?" becomes a grep
+rather than one file read. The mitigation is that the heading is a fixed convention —
+`## Open questions` — so the grep is reliable. That trade was taken deliberately.
+
+`OpenQuestion` as a **node type is unchanged**, and so is the `RESOLVE` outcome. Only where the
+text sits changed.
 
 **Promotion is a merge, not a move** (corrected 2026-07-16, on building
 `skills/promote-candidate/` against ten real candidates). The candidate's claim lands *in a

@@ -15,19 +15,20 @@ until a human approves, and never resolve a contradiction on your own.
 
 ## Promotion is not one verb
 
-Five outcomes. `scripts/classify_candidates.py <hub-root>` decides which:
+Six outcomes. `scripts/classify_candidates.py <hub-root>` decides which:
 
 | Verdict | Means |
 |---|---|
-| **MERGE** | The claim lands in a section of the target file. The only one that resembles "moving" it. |
+| **MERGE** | The claim lands in a section of the target file. |
+| **APPEND** | The target is a **collection** (a trailing-slash folder). Create a **new member file** in it; nothing existing is edited. |
 | **CONTRADICTS** | The target says the opposite. **A human decides which moves — the doc, or the world.** Never auto-apply. |
 | **RESOLVE** | An `OpenQuestion` doesn't promote — it *resolves* into another type first. |
 | **NO-HOME** | `target: null`. Nothing to promote into until the manifest grows a file. |
 | **NEVER** | A `Conversation` is a provenance root. It stays in staging permanently. |
 
-**Count against the script, not this table.** This said "six" over five rows while the
-script's docstring said "four" over four — a leftover from HANDOVER, dropped in v2.2.
-`classify()` is the only one of the three that decides anything.
+**Count against the script, not this table.** This table has been wrong before, and so has the
+script's docstring, in opposite directions. `classify()` is the only one of the three that
+decides anything.
 
 ## Duplicates ingestion already linked
 
@@ -145,6 +146,40 @@ manifest drifts away from what the team thinks it says. The PR summary says plai
 
 If the index row already reads as present and correct, there is nothing to update — say that
 rather than touching the file.
+
+## APPEND — a new member in a collection
+
+The target ends in `/`, so it is a **collection**: a folder of same-typed files where nothing
+traverses a member (ADRs are the usual case). This does not edit an existing document — it
+**creates a new file**.
+
+For each batch:
+
+1. **Read the collection's row in the index.** It carries the `Members` pattern — one of
+   `{slug}.md`, `{date}-{slug}.md`, or `NNN-{slug}.md`. **The pattern is the naming rule and
+   nothing else**: never read meaning back out of an existing member's filename.
+2. **Generate the member's name** from that pattern:
+   - `{slug}` — kebab-case, from the claim's subject. Keep it short and specific.
+   - `{date}` — today, `YYYY-MM-DD`.
+   - `NNN` — **read the directory and take the next unused number**, zero-padded to match its
+     siblings. If the folder is empty, start at `001`.
+3. **Draft the member.** Pattern it on sibling members in the same folder — same frontmatter
+   keys, same heading shape. If there are none, use the plainest shape that fits the
+   collection's *About* text, and **say that you had no sibling to follow**.
+4. **Show the human the whole new file**, plus its generated name.
+5. On approval: write it, mark the candidate `state: canonical`, open one PR for the batch.
+
+**The guard is the same as a pending home:** the collection's **row must already exist**.
+Promotion never creates a collection and the row justifying it in one motion — that would let
+the tool invent its own destination. **No row, no collection: that is `NO-HOME`.**
+
+**The index is not edited.** One row already covers the folder, which is the point of a
+collection — adding a member changes nothing about what the index says. (Contrast a pending
+home, where the row's *file* first comes into existence and the row must be updated.)
+
+> **Run promotion single-threaded.** `NNN-{slug}.md` numbers by reading the directory, so two
+> promotions running at once can both take `004`. This is not enforced anywhere — it is a
+> requirement of using this plugin. `{date}-{slug}.md` and `{slug}.md` cannot collide this way.
 
 ## CONTRADICTS — stop
 

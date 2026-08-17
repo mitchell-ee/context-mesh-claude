@@ -145,13 +145,11 @@ Every file answers two questions, and the layout makes both unambiguous:
 **A domain is exactly a directory under `domains/`.** Not a thing that looks like one — the
 path *is* the declaration, so nothing has to detect domain-ness. A folder called `product/` at
 the root is the cross-cutting product tree; a folder called `product/` under
-`domains/payments/` is that domain's. (Before v2.2 domains sat at the root and had to be
-guessed at, which reported a `docs/product/` research folder as a domain while missing the real
-one.)
+`domains/payments/` is that domain's.
 
 **A domain is a namespace, not necessarily a code repository.** It may map to one repo, span
-several, or be finer than one. **Which domains exist is per-engagement config**; that they own
-their context exclusively, where they exist, is fixed.
+several, or be finer than one. **Which domains exist is your choice**; that they own their
+context exclusively, where they exist, is fixed.
 
 **Domains are optional, and so is the Hub having a repo to itself.** Two things vary, and they
 are independent of each other:
@@ -165,6 +163,46 @@ are independent of each other:
 
 So a monorepo mesh is typically the top half of the diagram above and nothing else: a root
 index, the cross-cutting folders, `staging/`. That is the whole structure, correctly set up.
+
+### Three kinds of thing, and how to tell them apart
+
+Context comes in three shapes. You will meet all three in a normal mesh, and picking the right
+one is usually obvious once you know they exist.
+
+**1. A single document.** One file about one subject — `technical/system-behavior.md`,
+`product/business-context.md`. Most context is this. You point at it by its path, and that is
+the end of the story.
+
+**2. A folder of documents that reference each other.** Discovery work is the example:
+opportunities, solutions, and stories, each in its own file, each carrying an ID like
+`OPP-0042`. A story says which solution it belongs to *by that ID*, so the files form a chain
+you can follow. The IDs and folder names are fixed by the framework, because the chain breaks
+if they move.
+
+**3. A folder of documents that nothing references.** Architecture decision records are the
+example: `decisions/001-gcp-dev-region-us-east1.md`, `002-…`, and so on. They are all the same
+kind of thing, more arrive over time, and each is its own file — but nothing points at a
+specific one. We call this a **collection**. You point at the *folder*, not at any member.
+
+**The one question that separates 2 from 3: does anything follow a reference to a specific
+file in the folder?**
+
+- **Yes** → it is a discovery artifact. It needs IDs, the structure is fixed, and tooling
+  checks the references still resolve.
+- **No** → it is a collection. You choose the folder, you choose the file-naming convention,
+  and nothing validates a member beyond "the folder exists."
+
+That is the whole test. It is worth applying deliberately, because kinds 2 and 3 look identical
+on disk — both are just a folder of markdown files — and only the referencing tells them apart.
+
+**Why not list every file individually?** You could give each ADR its own row in the index, but
+the index would grow forever, every new ADR would mean editing the index, and fourteen rows
+would say nearly the same thing. One row for the folder says it once.
+
+**Personas are the interesting edge case.** They look exactly like a collection — one file per
+persona, in a folder. But story files name a persona *by its slug*, which is a reference
+someone follows, so personas answer **yes** to the question above and are treated as kind 2.
+If you rename a persona file, something breaks. If you rename an ADR, nothing does.
 
 ### Canonical vs. staging
 

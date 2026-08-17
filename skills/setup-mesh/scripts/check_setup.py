@@ -3,7 +3,8 @@
 
 Answers one question: can ingestion actually run here? Two things decide it --
   1. an index exists (routing reads it, and only it)
-  2. it lists something, and what it lists is real
+  2. it lists something, and what it lists is real -- context FILES (singletons, linked by
+     path) and COLLECTIONS (folders of same-typed files, linked with a trailing slash)
 
 Deliberately does NOT check for the default manifest's context files. The file list is the
 manifest -- per-implementation config, not a spec to conform to. A repo missing
@@ -34,6 +35,16 @@ INDEX = "context-index.md"
 # example row -- earlier it shipped an empty table and said nothing, and an index written
 # with backticked paths parsed to zero files while reporting READY (fail-open #9).
 LINK = re.compile(r"\[[^\]]+\]\(([^)#]+\.md)\)")
+
+# A markdown link to a COLLECTION -- a folder of same-typed files addressed by path, where
+# nothing traverses a member: [decisions/](decisions/). The trailing slash is what tells a
+# collection from a singleton, for a human and for this regex both.
+#
+# This needs its own pattern because LINK requires a literal `.md`, so a directory target
+# never matched it: the path was not extracted, not existence-checked, and a row pointing at
+# a nonexistent folder passed while the verdict said "those files are real". Collections were
+# not passing by accident -- they were invisible (fail-open #13).
+COLLECTION_LINK = re.compile(r"\[[^\]]+\]\(([^)#]+/)\)")
 
 # HTML comments are guidance for the author, not entries. The index templates explain the
 # row format inside a comment, and a commented-out row is a normal way to park an entry --
@@ -79,6 +90,62 @@ def find_listed_files(index_text):
             continue
         out.append(p)
     return sorted(set(out))
+
+
+def find_listed_collections(index_text):
+    """Collection folders the index links to, minus external/absolute ones we can't check.
+
+    Same filtering as `find_listed_files`, on trailing-slash targets. Staging folders are
+    excluded: the index's Staging table names `staging/candidates/` and friends as backticked
+    text, not links, precisely because they are not context homes -- but a hand-authored index
+    may link one anyway, and reporting a lazily-created staging folder as a broken collection
+    would be a fail-CLOSED bug (broken when it isn't).
+    """
+    out = []
+    for m in COLLECTION_LINK.finditer(COMMENT.sub("", index_text)):
+        p = m.group(1).strip()
+        if p.startswith(("http://", "https://", "/")):
+            continue
+        if p.split("/")[0] == "staging":
+            continue
+        out.append(p)
+    return sorted(set(out))
+
+
+def check_collections(listed, base, root=None):
+    """Split declared collections into (missing, empty).
+
+    Two different findings, deliberately:
+
+      * MISSING -- the directory does not exist. The row points at nothing, which is an error.
+      * EMPTY   -- the directory exists with no members. A NOTE, not an error, for the same
+                   reason a listed-but-unwritten file is a pending home: the row declares
+                   *where this kind of context goes*, and never claimed the folder was
+                   occupied yet.
+
+    Only `.md` members count. A folder holding just a README or a .gitkeep is empty as far as
+    context is concerned, and saying otherwise would let a placeholder satisfy the check.
+    """
+    root = root or base
+    missing, empty = [], []
+    for p in listed:
+        if escapes_root(base, p, root):
+            continue
+        full = os.path.join(base, p)
+        if not os.path.isdir(full):
+            missing.append(p)
+            continue
+        try:
+            members = [f for f in os.listdir(full) if f.endswith(".md")]
+        except OSError as exc:
+            # Fail CLOSED: an unreadable directory is not an empty one. Guessing "empty"
+            # here would report a populated collection as unfilled; guessing "fine" would
+            # hide it entirely. Say what happened instead.
+            missing.append(f"{p} (unreadable: {exc.strerror})")
+            continue
+        if not members:
+            empty.append(p)
+    return missing, empty
 
 
 def escapes_root(base, rel_path, root):
@@ -192,6 +259,23 @@ def main():
             f"will create it when it has content for it. If the path is a typo, nothing else "
             f"will catch that, so check it here.")
 
+    # 3b. Declared collections -- a folder of same-typed files, addressed by path.
+    #
+    # A MISSING directory is a problem: unlike a pending home, there is no promotion step that
+    # creates a *folder* for a row. An EMPTY one is a note, for exactly the pending-home
+    # reason -- the row says where this kind of context goes, not that any exists yet.
+    collections = find_listed_collections(index_text)
+    missing_dirs, empty_dirs = check_collections(collections, repo)
+    for p in missing_dirs:
+        problems.append(
+            f"Index declares the collection `{p}` but no such directory exists. A collection "
+            f"row points at a folder; nothing creates that folder for you.")
+    for p in empty_dirs:
+        notes.append(
+            f"Collection `{p}` is declared but holds no .md members yet. That is a normal "
+            f"state -- the row declares where this kind of context goes. Promotion adds "
+            f"members when it has content for them.")
+
     # 4. Present but unlisted -- invisible to routing.
     #
     # Only PATH-REFERENCED singletons need a link. Discovery artifacts (the OST) are
@@ -199,9 +283,18 @@ def main():
     # reference payments:OPP-0001 without loading the file. That IS progressive
     # disclosure -- demanding a link per artifact would invert it, and would mean re-editing
     # the index on every new opportunity.
+    # Nor does a COLLECTION member. The whole point of a collection row is that one row
+    # covers the folder -- flagging each member as unlisted would recreate the per-file rows
+    # collections exist to avoid, and would punish a correctly declared collection with a
+    # note per ADR.
     listed_set = set(listed)
     ost_ids = set(re.findall(
         r"\b(OUTCOME|OPP|SOL|ASSUMPTION|STORY|EPIC)-(\d{4})\b", index_text))
+    collection_dirs = [os.path.normpath(c) for c in collections]
+
+    def in_collection(rel):
+        parent = os.path.dirname(os.path.normpath(rel))
+        return any(parent == c or parent.startswith(c + os.sep) for c in collection_dirs)
 
     for sub in ("technical", "product", "process"):
         d = os.path.join(repo, sub)
@@ -214,6 +307,8 @@ def main():
                 rel = os.path.relpath(os.path.join(root, f), repo)
                 if rel in listed_set:
                     continue
+                if in_collection(rel):
+                    continue  # covered by its collection's row. Correct.
 
                 # An ID'd discovery artifact is declared by its ID, not a link.
                 m = re.search(
@@ -235,11 +330,11 @@ def main():
     if quiet:
         return 1 if problems else 0
 
-    report(repo, problems, notes)
+    report(repo, problems, notes, n_files=len(listed), n_collections=len(collections))
     return 1 if problems else 0
 
 
-def report(repo, problems, notes):
+def report(repo, problems, notes, n_files=0, n_collections=0):
     print(f"Setup check: {repo}")
     print()
 
@@ -260,23 +355,40 @@ def report(repo, problems, notes):
     if not problems:
         # The verdict must not claim more than was checked. "What it lists is real" is
         # vacuously true of an empty list, which is precisely how fail-open #9 read as a
-        # pass -- so an index that lists nothing gets its own wording.
-        empty = any("lists no context files" in n for n in notes)
+        # pass -- so an index that routes to nothing gets its own wording.
+        #
+        # `n_files`/`n_collections` are PASSED IN, not re-derived from the note text. Reading
+        # them back out of prose would mean the verdict and the check could disagree while
+        # looking consistent -- and a verdict that speaks only of files silently omits a
+        # populated collection, which is how collections went unmentioned before (#13).
         pending = sum(1 for n in notes if "a pending home" in n)
-        if empty:
+        routable = n_files + n_collections
+
+        if not routable:
             print("READY to run -- but NOTHING TO ROUTE TO. The index exists and nothing in "
                   "it is broken, because it lists nothing (see notes). Ingestion will report "
                   "every fact as having no home until the index lists a file.")
-        elif pending:
-            # Say the count out loud rather than a bare READY. These rows are legitimate
-            # (promotion fills them), but a typo has the same shape, and the number is the
-            # only prompt a human gets to look.
-            noun = "is a PENDING HOME" if pending == 1 else "are PENDING HOMES"
-            print(f"READY. An index exists and it lists context files. {pending} of them "
-                  f"{noun} -- declared but not yet written (see notes). That is a normal "
-                  f"state; promotion creates them. Check they are not typos.")
         else:
-            print("READY. An index exists, it lists context files, and those files are real.")
+            # Name what was actually checked, in the units it was checked in.
+            parts = []
+            if n_files:
+                parts.append(f"{n_files} context file{'s' if n_files != 1 else ''}")
+            if n_collections:
+                parts.append(
+                    f"{n_collections} collection{'s' if n_collections != 1 else ''}")
+            listed_desc = " and ".join(parts)
+
+            if pending:
+                # Say the count out loud rather than a bare READY. These rows are legitimate
+                # (promotion fills them), but a typo has the same shape, and the number is
+                # the only prompt a human gets to look.
+                noun = "is a PENDING HOME" if pending == 1 else "are PENDING HOMES"
+                print(f"READY. An index exists and it lists {listed_desc}. {pending} of the "
+                      f"files {noun} -- declared but not yet written (see notes). That is a "
+                      f"normal state; promotion creates them. Check they are not typos.")
+            else:
+                print(f"READY. An index exists, it lists {listed_desc}, and every listed "
+                      f"path resolves to something real.")
         print()
         print("Missing context files are NOT checked -- the file list is the manifest, and a")
         print("repo without a given file is a repo without that context, not a broken repo.")

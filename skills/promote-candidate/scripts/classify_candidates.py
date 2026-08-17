@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 """Classify staging candidates by what promotion actually means for each, batched by target.
 
-Promotion is not one verb. Reading the ten candidates ingestion produced, they need FIVE
-different outcomes -- and only one of them is anything like "move the file":
+Promotion is not one verb. Candidates need SIX different outcomes -- and only two of them
+write anything into canonical context:
 
   MERGE       the claim lands in a section of an existing context file
+  APPEND      the target is a collection; create a NEW member file in it
   CONTRADICTS the target says the opposite; a human decides which one moves. NEVER auto-apply
   RESOLVE     an OpenQuestion does not promote -- it resolves into another type first
   NO-HOME     target_path is null; nothing to promote into until the manifest grows a file
   NEVER       provenance roots (Conversation) stay in staging forever, by definition
 
-(This docstring said "four" and listed four while classify() returned five, and SKILL.md said
-"six" over the same five. Corrected 2026-08-14 -- count against classify(), which is the only
-one of the three that decides anything.)
+(This docstring has been wrong twice: it said "four" while classify() returned five, and
+SKILL.md said "six" over that same five. COUNT AGAINST classify() -- it is the only one of
+the three that decides anything. The count is six because APPEND was added, not because the
+old "six" was right.)
 
 A sixth verb, HANDOVER, existed through v2.1: the target was a Workflow, so the item belonged
 in Jira/Linear and the mesh handed it over rather than filing it. The workflow layer is
@@ -108,6 +110,18 @@ def classify(fm, body):
     if target.startswith("staging/") or "/staging/" in target:
         return "NO-HOME", ("Target is inside staging -- that is output, not canonical context. "
                            "This candidate has no canonical destination.")
+
+    # A trailing slash means the target is a COLLECTION -- a folder of same-typed files where
+    # nothing traverses a member. That is a different act from MERGE: MERGE edits prose inside
+    # an existing document, APPEND generates a filename and creates a new one. Folding it into
+    # MERGE would make the summary lie about what promotion is going to do.
+    if target.endswith("/"):
+        return "APPEND", ("The target is a collection -- a folder of same-typed files. This "
+                          "does not edit an existing document: it CREATES a new member, named "
+                          "from the collection's declared pattern in the index. The row must "
+                          "already exist (promotion never creates a collection and its "
+                          "justifying row in one motion). Ordinal patterns number by reading "
+                          "the directory, so run promotion single-threaded.")
 
     return "MERGE", "The claim lands in a section of the target file."
 
@@ -209,9 +223,13 @@ def main():
     # `technical/system-behavior.md` existed in most repos, so keying on it alone merged
     # one service's facts into another's document -- cross-repo fact corruption under a
     # confident review. The single-Hub collapse makes that impossible by construction.
+    # APPEND batches here too: it has a real destination, and several new members landing in
+    # one collection are still one reviewed change. It is NOT one edit to one file, though --
+    # each appended candidate becomes its own new file -- so the batch header says which kind
+    # of target it is rather than claiming every batch is a single-document edit.
     batches = {}
     for r in rows:
-        if r["verdict"] in ("MERGE", "CONTRADICTS"):
+        if r["verdict"] in ("MERGE", "CONTRADICTS", "APPEND"):
             batches.setdefault(r["target"], []).append(r)
 
     print(f"Promotion plan: {hub}")
@@ -220,7 +238,7 @@ def main():
 
     if batches:
         print("=" * 76)
-        print("BATCHED BY TARGET FILE -- one edit per file, so the merge is reviewed whole")
+        print("BATCHED BY TARGET -- one change per target, so it is reviewed whole")
         print("=" * 76)
 
         # Everything lives in one repo, so the whole batch is ONE PR regardless of how many
@@ -230,8 +248,10 @@ def main():
             group = batches[target]
             blocked = [r for r in group if r["verdict"] == "CONTRADICTS"]
             domains = sorted({r["domain"] for r in group})
+            appends = [r for r in group if r["verdict"] == "APPEND"]
             print()
-            print(f"  {target}  ({len(group)} candidate(s))")
+            kind = "collection" if target.endswith("/") else "file"
+            print(f"  {target}  ({len(group)} candidate(s), {kind})")
             if mesh_mode:
                 print(f"    domain: {', '.join(domains)}")
             linked = [r for r in group if r["duplicate_of"]]
@@ -247,6 +267,14 @@ def main():
                       "was rewritten.")
                 print("       Merge the claim ONCE. Mark the duplicates canonical without "
                       "merging them again.")
+            if appends:
+                print(f"    -> {len(appends)} of these CREATE a new member file, one each, "
+                      f"named from the")
+                print("       collection's pattern in the index. Nothing existing is edited. "
+                      "The collection's")
+                print("       row must already exist. Ordinal patterns number by reading the "
+                      "directory, so")
+                print("       run promotion single-threaded.")
             if blocked:
                 print(f"    -> This batch contains {len(blocked)} contradiction(s). "
                       f"Resolve them with a human")
@@ -259,10 +287,10 @@ def main():
             print("  batch is reviewed and merged as a single change.")
             print()
 
-    others = [r for r in rows if r["verdict"] not in ("MERGE", "CONTRADICTS")]
+    others = [r for r in rows if r["verdict"] not in ("MERGE", "CONTRADICTS", "APPEND")]
     if others:
         print("=" * 76)
-        print("NOT A FILE MERGE")
+        print("NOT A WRITE INTO CANONICAL CONTEXT")
         print("=" * 76)
         for r in others:
             print()

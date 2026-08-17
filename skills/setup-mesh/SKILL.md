@@ -173,13 +173,38 @@ and missing. Backtick them, one bullet each, with the reason:
 - `product/personas/` — personas are cross-cutting; see the Hub root
 ```
 
-**Three states share filename-shaped syntax and mean different things.** Keep them apart:
+**3. A collection row's path is a LINK ending in `/`.** A collection is a folder of same-typed
+files that nothing traverses — ADRs are the usual case — and it gets **one row for the folder**,
+in its own `## Collections` table:
+
+```markdown
+## Collections
+
+| Collection | Members | About | Load when |
+|---|---|---|---|
+| [decisions/](decisions/) | `NNN-{slug}.md` | Architecture decision records | deciding something with precedent |
+```
+
+- **The trailing slash is what tells a collection from a file**, for a human and for the
+  checker both. The context-file regex requires a literal `.md`, so a collection needs the
+  slash to be seen at all.
+- **Linked, not backticked** — the opposite of rule 2, and for the same underlying reason: a
+  link means "this is a real home." A collection **is** one; a deliberate gap is not.
+- **`Members` is the naming pattern** — one of `{slug}.md`, `{date}-{slug}.md`, or
+  `NNN-{slug}.md`. It is used only to *name* a new member; nothing reads meaning back out of
+  an existing filename.
+- **A missing directory is an error; an empty one is a note.** Nothing creates the folder for
+  you, but an empty declared collection is a normal state — the row says where this kind of
+  context goes, not that any exists yet.
+
+**Four states share filename-shaped syntax and mean different things.** Keep them apart:
 
 | State | Where it goes | Means |
 |---|---|---|
 | **Deliberate gap** | *Not in this mesh*, backticked | This file should never exist here |
 | **Pending home** | a context-table row, linked | Declared home; not written yet. **Normal** — promotion fills it |
 | **Broken link** | a context-table row, linked | Was real, now missing — a genuine error |
+| **Collection** | a *Collections* row, linked, trailing `/` | A folder of same-typed files; one row covers every member |
 
 **The last two are still indistinguishable, and now neither blocks.** That is a deliberate
 trade: treating a pending home as broken was the worse error, because it made setup withhold
@@ -215,6 +240,7 @@ concluding anything.
 | [0.3.0-domains-under-domains.md](migrations/0.3.0-domains-under-domains.md) | a root-level dir holds a `context-index.md` | **reports only** — the human moves it |
 | [0.3.0-defer-workflow-layer.md](migrations/0.3.0-defer-workflow-layer.md) | a `## Workflows` section, or a row into `process/workflows/` | removes those index rows; reports what is now unreferenced |
 | [0.6.0-remove-pii-policy.md](migrations/0.6.0-remove-pii-policy.md) | the Hub root index has a `**PII policy:**` line | removes that line; reports that ingestion no longer redacts |
+| [0.11.0-open-questions-into-targets.md](migrations/0.11.0-open-questions-into-targets.md) | a `staging/open-questions.md` exists | **reports only** — the human moves each question into the file it is about |
 
 **The one rule every migration honors** ([migrations/README.md](migrations/README.md)):
 

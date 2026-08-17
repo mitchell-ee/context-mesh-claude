@@ -282,6 +282,13 @@ with the rest of the workflow layer.
   it write straight to staging with no PR. Promotion reads the link and presents the batch
   pre-collapsed, so the human decides once instead of re-deriving the overlap.
 
+  > **"Only ever adds" governs the context layer, not raw inputs** (scoped 2026-08-17). The
+  > invariant is that nothing already written *as context* — a candidate, a canonical file — is
+  > rewritten or deleted by ingestion. It says nothing about the transcript that produced it: a
+  > raw file in `staging/inbox/` is **input**, and ingestion moves it to `inbox/processed/`
+  > when done. Read unscoped, the rule appears to forbid that move and pushes toward encoding
+  > processed-state in a hash somewhere instead of showing it on disk. It doesn't.
+
   **Scoping the staged read to same-target candidates was rejected.** It would have kept the
   chunk-bound, but silently missed the case that most needs catching: two conversations
   describing one fact and routing it to *different* files. A scoped read fails silently; a
