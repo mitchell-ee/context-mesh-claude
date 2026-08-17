@@ -90,6 +90,17 @@ PARENT_KEY = re.compile(
 # meaningful (the "no home in this mesh" finding), so it is skipped rather than flagged.
 TARGET_KEY = re.compile(r"^target:\s*(\S+)\s*$", re.M)
 
+# `duplicate_of:` -- another bare top-level key, set by dedup to whatever already carries the
+# claim. Two shapes are legal, because dedup now compares against two things: a Hub-relative
+# PATH when canonical context already says it, or a candidate ID when an unpromoted candidate
+# from an earlier ingestion does (added 2026-08-14). Both resolve through the same machinery.
+#
+# It is walked for the reason `target:` is: it is a reference, and an unwalked reference is
+# invisible rather than merely unchecked. The staged case makes that sharper -- the candidate
+# it names may be promoted or dropped later, so this is a pointer that can go stale AFTER
+# being written correctly, which is exactly when nobody thinks to look at it again.
+DUPLICATE_OF_KEY = re.compile(r"^duplicate_of:\s*(\S+)\s*$", re.M)
+
 # A `Workflow`'s `external_ref` was walked here until v2.2 deferred the workflow layer.
 # The check is gone with the type, but the finding is worth carrying: it was fail-open #8
 # (2026-07-30) -- a workflow pointing at a nonexistent directory passed clean, because the
@@ -128,6 +139,12 @@ def parse_edges(text):
         dest = tm.group(1).strip().strip("'\"")
         if dest.lower() not in ("null", "~", "none"):
             out.append(("target", dest))
+
+    dm = DUPLICATE_OF_KEY.search(fm)
+    if dm:
+        dest = dm.group(1).strip().strip("'\"")
+        if dest.lower() not in ("null", "~", "none"):
+            out.append(("duplicate_of", dest))
 
     for pm in PARENT_KEY.finditer(fm):
         # Reported as `parent-of` so a broken traceability link reads in the vocabulary's

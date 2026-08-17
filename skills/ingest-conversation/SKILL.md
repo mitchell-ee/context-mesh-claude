@@ -52,9 +52,16 @@ isn't already there (stage 3.5). This is bounded and it does not weaken the rule
 | | Routing | Dedup |
 |---|---|---|
 | **When** | Before a target exists | After the target is fixed |
-| **Reads** | Indexes only | The one file routing chose |
-| **Asks** | What is this file *about*? | What does this file already *say*? |
-| **Cost** | N domains → 1 index each | ≤ N chunks, and only existing files |
+| **Reads** | Indexes only | The file routing chose, **plus unpromoted staging** |
+| **Asks** | What is this file *about*? | What does the mesh already *say*? |
+| **Cost** | N domains → 1 index each | ≤ N chunks (canonical) + the staged pool |
+
+**The staged pool is bounded differently, and deliberately so.** Candidates run ~2 KB and a
+human actively drains the pool, so even a neglected 100 is ~200 KB — a fixed-size pool, not
+the mesh. Scoping it to same-target candidates was considered and **rejected**: it would
+silently miss the case that most needs catching, where two conversations describe the same
+fact and get routed to *different* files. A scoped read fails silently; a pool-size warning
+fails loudly.
 
 **The order is what makes it safe.** Reading after the decision cannot influence the
 decision. Reading *before* — opening candidate files to work out where something fits —
@@ -277,37 +284,56 @@ Write the proposals to a JSON file:
   `null`, plus a `rationale`, when the mesh has no home for the chunk.
 - `dropped_count` — how many chunks distillation discarded as non-durable. Reported at the
   checkpoint, because "9 placed" means something different if 4 were dropped than if 40 were.
-- `duplicate_of` — set by **dedup only** (stage 3.5) to the path already carrying the claim.
-  A chunk with this set is not written; it is reported as dropped.
+- `duplicate_of` — set by **dedup only** (stage 3.5) to whatever already carries the claim:
+  a Hub-relative **path** (canonical context says it) or a **candidate ID** (an unpromoted
+  candidate from an earlier ingestion says it). A chunk with this set is not written; it is
+  reported as dropped. `check_references.py` walks it, so a broken pointer is caught.
 
-## Stage 3.5 — Dedup against the target file
+## Stage 3.5 — Dedup against canonical context *and* unpromoted staging
 
-Routing is done and every chunk has a target. Now read those targets — and only those.
+Routing is done and every chunk has a target. A claim can already exist in **two** places,
+and missing either one ships a duplicate:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/ingest-conversation/scripts/collect_dedup_targets.py" <placements.json> <mesh-root> --explain
 ```
 
-That prints the **permitted read set**: the existing files routing chose. Read each one and
-compare it against the chunks routed there. Nothing outside that list. If it exits non-zero,
-a target didn't resolve — **fix that before writing anything**, because an unresolved target
-looks exactly like "no duplicates found," and every duplicate would ship silently.
+That prints the **permitted read set**, in two labeled parts:
 
-Three outcomes per chunk:
+| Set | What it is | Asks |
+|---|---|---|
+| **CANONICAL** | The existing files routing chose. Bounded by chunk count. | Does decided context already say this? |
+| **STAGED** | Unpromoted candidates from **earlier ingestions**. Bounded by the pool. | Did a previous conversation already produce this claim? |
 
-| The target file… | Do this |
+Read both, and nothing outside them. If it exits non-zero, a target didn't resolve **or a
+staging directory couldn't be read** — fix that before writing anything. Both failures look
+exactly like "no duplicates found."
+
+**Why the staged set exists:** a candidate that hasn't been promoted is by definition *not*
+in canonical context, so the canonical read cannot see it. Without this, two conversations
+three weeks apart could each produce the same claim, and both would sit in staging unlinked
+until a human noticed at promotion time.
+
+Three outcomes per chunk, against **either** set:
+
+| The target file or staged candidate… | Do this |
 |---|---|
 | **doesn't contain the claim** | Write the candidate as normal. |
-| **already makes the same claim** | **Drop the chunk.** Set `duplicate_of: <path>`. Don't write a candidate — report it at the checkpoint and in the commit summary. |
-| **makes a *different* claim about the same thing** | **A contradiction, not a duplicate.** Keep the chunk, add a `contradicts` edge, flag it. |
+| **already makes the same claim** | **Drop the chunk.** Set `duplicate_of:` to the canonical `<path>` or the staged `<candidate-id>`. Don't write a candidate — report it at the checkpoint and in the commit summary. |
+| **makes a *different* claim about the same thing** | **A contradiction, not a duplicate.** Keep the chunk, add a `contradicts` edge pointing at the path or candidate ID, flag it. |
 
 **Same claim vs. different claim is a judgement — make it conservatively.** Reworded but
 identical → duplicate. Different substance → contradiction. Genuinely unsure → keep it and
 flag it. A false duplicate silently deletes a real fact; a false contradiction costs a human
 thirty seconds. Those errors are not equal, so do not treat them as such.
 
-**Never edit the target file.** Dedup reads. Writing to canonical context is promotion, and
-that is a separate human act.
+**Never edit the target file, and never edit a staged candidate.** Dedup reads and *links*;
+it does not resolve. Writing to canonical context is promotion. Rewriting a candidate an
+earlier run wrote — and a human may already have reviewed — is not ingestion's to do:
+**ingestion only ever adds.** The link is what lets promotion present a pre-collapsed batch.
+
+**A large pool is a note, never a blocker.** Above the warning threshold the script says the
+pool is worth draining and carries on. Surface it at the checkpoint; do not stop the run.
 
 ## Stage 4a — The checkpoint (approve before the PR)
 

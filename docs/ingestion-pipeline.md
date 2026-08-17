@@ -269,8 +269,23 @@ with the rest of the workflow layer.
   a likely duplicate and could not check, and `rf-0003`, whose target file documents the
   opposite behavior. Both would have shipped without this.
 
-  **Still open:** dedup against *staging* (sibling candidates from another conversation) — out
-  of scope; the human sees both at the gate.
+  **Closed 2026-08-14: dedup now reads staging too.** This was deferred as "the human sees
+  both at the gate," which held only while staging drained fast. Two conversations weeks
+  apart could each produce the same claim and both would sit in staging unlinked, because a
+  candidate that has not been promoted is *by definition* not in canonical context — so the
+  canonical read could never see it. Dedup now returns **two read sets**: the canonical
+  target (chunk-bounded) and the unpromoted pool (pool-bounded), with a warning above 50
+  candidates.
+
+  **It links; it never resolves.** A match sets `duplicate_of` to the staged candidate's ID,
+  and the staged candidate is left untouched — ingestion only ever adds, which is what lets
+  it write straight to staging with no PR. Promotion reads the link and presents the batch
+  pre-collapsed, so the human decides once instead of re-deriving the overlap.
+
+  **Scoping the staged read to same-target candidates was rejected.** It would have kept the
+  chunk-bound, but silently missed the case that most needs catching: two conversations
+  describing one fact and routing it to *different* files. A scoped read fails silently; a
+  pool-size warning fails loudly.
 - **Conflict handling:** a chunk that *contradicts* existing canonical context — flag for
   human as a conflict edge, don't silently overwrite. Likely a dedicated `contradicts` edge.
 - **Surface choice:** which validation surface to build first (Slack vs. LLM console vs.

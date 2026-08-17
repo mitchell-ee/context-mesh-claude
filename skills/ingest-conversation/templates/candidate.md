@@ -7,6 +7,9 @@ tag: <decided|undecided>
 state: staging                        # always. Nothing ingestion writes is canonical.
 target: <eventual/canonical/path.md>  # or: null, with a no-home note in the body
 confidence: <high|medium|low>
+# duplicate_of: <path.md | candidate-id>   # set by dedup ONLY (stage 3.5). A Hub-relative
+#   path when canonical context already carries the claim, or a candidate ID when an
+#   unpromoted candidate from an earlier ingestion does. Omit entirely when not a duplicate.
 edges:
   - edge: derives-from                # mandatory on every Group-A node
     target: <conversation-id>

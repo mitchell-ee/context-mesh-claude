@@ -1,17 +1,27 @@
 #!/usr/bin/env python3
 """Classify staging candidates by what promotion actually means for each, batched by target.
 
-Promotion is not one verb. Reading the ten candidates ingestion produced, they need four
+Promotion is not one verb. Reading the ten candidates ingestion produced, they need FIVE
 different outcomes -- and only one of them is anything like "move the file":
 
   MERGE       the claim lands in a section of an existing context file
   CONTRADICTS the target says the opposite; a human decides which one moves. NEVER auto-apply
+  RESOLVE     an OpenQuestion does not promote -- it resolves into another type first
   NO-HOME     target_path is null; nothing to promote into until the manifest grows a file
   NEVER       provenance roots (Conversation) stay in staging forever, by definition
 
-A fifth verb, HANDOVER, existed through v2.1: the target was a Workflow, so the item belonged
+(This docstring said "four" and listed four while classify() returned five, and SKILL.md said
+"six" over the same five. Corrected 2026-08-14 -- count against classify(), which is the only
+one of the three that decides anything.)
+
+A sixth verb, HANDOVER, existed through v2.1: the target was a Workflow, so the item belonged
 in Jira/Linear and the mesh handed it over rather than filing it. The workflow layer is
 deferred as of v2.2; the design is retained privately.
+
+Candidates ingestion linked as duplicates are grouped, not re-judged: a `duplicate_of`
+pointing at another candidate means an earlier ingestion already made this claim, and dedup
+declined to resolve it because ingestion only ever adds. Promotion is where a human sees both
+at once, so the link is surfaced with the batch rather than left for them to re-derive.
 
 Batched by target file: three candidates landing in one document are one edit, reviewed
 whole, not three sequential passes that conflict with each other.
@@ -146,6 +156,7 @@ def collect(cand_dir, rows, domain_label):
             "type": fm.get("type", "?"),
             "tag": fm.get("tag", ""),
             "target": fm.get("target", ""),
+            "duplicate_of": fm.get("duplicate_of", ""),
             "verdict": verdict,
             "why": why,
         })
@@ -223,9 +234,19 @@ def main():
             print(f"  {target}  ({len(group)} candidate(s))")
             if mesh_mode:
                 print(f"    domain: {', '.join(domains)}")
+            linked = [r for r in group if r["duplicate_of"]]
             for r in group:
                 mark = "  BLOCKED" if r["verdict"] == "CONTRADICTS" else ""
+                if r["duplicate_of"]:
+                    mark += f"  DUPLICATE OF {r['duplicate_of']}"
                 print(f"    [{r['verdict']:11}] {r['id']:12} {r['type']}{mark}")
+            if linked:
+                print(f"    -> {len(linked)} candidate(s) already linked as duplicates by "
+                      f"dedup at ingestion.")
+                print("       Ingestion never resolves these -- it only links, so nothing "
+                      "was rewritten.")
+                print("       Merge the claim ONCE. Mark the duplicates canonical without "
+                      "merging them again.")
             if blocked:
                 print(f"    -> This batch contains {len(blocked)} contradiction(s). "
                       f"Resolve them with a human")

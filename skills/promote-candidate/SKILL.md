@@ -15,7 +15,7 @@ until a human approves, and never resolve a contradiction on your own.
 
 ## Promotion is not one verb
 
-Six outcomes. `scripts/classify_candidates.py <hub-root>` decides which:
+Five outcomes. `scripts/classify_candidates.py <hub-root>` decides which:
 
 | Verdict | Means |
 |---|---|
@@ -24,6 +24,28 @@ Six outcomes. `scripts/classify_candidates.py <hub-root>` decides which:
 | **RESOLVE** | An `OpenQuestion` doesn't promote — it *resolves* into another type first. |
 | **NO-HOME** | `target: null`. Nothing to promote into until the manifest grows a file. |
 | **NEVER** | A `Conversation` is a provenance root. It stays in staging permanently. |
+
+**Count against the script, not this table.** This said "six" over five rows while the
+script's docstring said "four" over four — a leftover from HANDOVER, dropped in v2.2.
+`classify()` is the only one of the three that decides anything.
+
+## Duplicates ingestion already linked
+
+A candidate carrying `duplicate_of` was matched at ingestion against a claim that already
+existed — in canonical context, or in an **unpromoted candidate from an earlier
+conversation**. Dedup linked it and **deliberately did not resolve it**: ingestion only ever
+adds, so nothing already in staging was rewritten or deleted.
+
+The classifier groups these with their batch and marks them `DUPLICATE OF <id>`. What to do:
+
+- **Merge the claim once.** The linked duplicate does not get merged again — that is the
+  double-merge the link exists to prevent.
+- **Mark the duplicate `state: canonical` anyway.** It stays as the audit trail of the second
+  conversation that produced the claim: the fact was independently corroborated, and the
+  provenance of both is worth keeping.
+- **If the two are not actually the same claim, say so and merge both.** Dedup was
+  instructed to be conservative, but a false link is possible and this is where it gets
+  caught. A human overriding it here is the design working, not a failure.
 
 ## Batching — by target file, always
 
