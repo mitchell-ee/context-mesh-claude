@@ -157,7 +157,7 @@ context exclusively, where they exist, is fixed.
 So a monorepo mesh is typically the top half of the diagram above and nothing else: a root
 index, the cross-cutting folders, `staging/`. That is the whole structure, correctly set up.
 
-### Three kinds context
+### Three kinds of context
 
 Context comes in three shapes. You will meet all three in a normal mesh, and picking the right
 one is usually obvious once you know they exist.
