@@ -49,12 +49,25 @@ with lower confidence, and say so at the checkpoint and in the commit summary.
 Once a chunk has a target, **read that target file** before writing — to check the claim
 isn't already there (stage 3.5). This is bounded and it does not weaken the rule above:
 
-| | Routing | Dedup |
-|---|---|---|
-| **When** | Before a target exists | After the target is fixed |
-| **Reads** | Indexes only | The file routing chose, **plus unpromoted staging** |
-| **Asks** | What is this file *about*? | What does the mesh already *say*? |
-| **Cost** | N domains → 1 index each | ≤ N chunks (canonical) + the staged pool |
+| | Routing | Member resolution | Dedup |
+|---|---|---|---|
+| **When** | Before a target exists | After the folder is fixed | After the target is fixed |
+| **Reads** | Indexes only | Members of the collection routing chose (frontmatter first) | The file routing chose, **plus unpromoted staging** |
+| **Asks** | What is this file *about*? | *Which* member is this about? | What does the mesh already *say*? |
+| **Cost** | N domains → 1 index each | folder-bounded, warns at 40 | ≤ N chunks (canonical) + the staged pool |
+
+**Member resolution (stage 3.4) only runs when routing chose a collection** — a target ending
+in `/`. Routing picks the *folder* from the index; it cannot pick the member, because a
+collection is one index row describing the folder, not one row per file. Reading the members
+afterwards cannot change which folder was chosen, so the rule above holds for exactly the same
+reason dedup does: **the order is what makes it safe.**
+
+**Its cost is the one read here that is not chunk-bounded.** A chunk routed to a 40-member
+collection expands to 40 reads — folder-bounded, growing with the folder rather than the
+transcript. Frontmatter is read first and bodies only on demand, which is what keeps it small.
+Scoping the read by guessing at filenames was **rejected** for the reason the staged pool gives
+below, and because the taxonomy makes a member's naming pattern *opaque*: it generates a name,
+it never parses meaning out of an existing one.
 
 **The staged pool is bounded differently, and deliberately so.** Candidates run ~2 KB and a
 human actively drains the pool, so even a neglected 100 is ~200 KB — a fixed-size pool, not
@@ -284,10 +297,46 @@ Write the proposals to a JSON file:
   `null`, plus a `rationale`, when the mesh has no home for the chunk.
 - `dropped_count` — how many chunks distillation discarded as non-durable. Reported at the
   checkpoint, because "9 placed" means something different if 4 were dropped than if 40 were.
+- `member_resolution` — set by **member resolution only** (stage 3.4), and only for a chunk
+  routed to a collection: `resolved`, `created`, or `created-near-match`. With `resolved` the
+  chunk's `target` is rewritten to the member's path; with either `created` value it stays the
+  folder. `member_near_match` names the member that was considered and rejected.
 - `duplicate_of` — set by **dedup only** (stage 3.5) to whatever already carries the claim:
   a Hub-relative **path** (canonical context says it) or a **candidate ID** (an unpromoted
   candidate from an earlier ingestion says it). A chunk with this set is not written; it is
   reported as dropped. `check_references.py` walks it, so a broken pointer is caught.
+
+## Stage 3.4 — Member resolution (collections only)
+
+**Runs only for chunks whose target ends in `/`.** Routing chose a *folder*; this decides
+*which member* — modify an existing one, or create a new one. Skip this stage entirely if no
+chunk routed to a collection.
+
+The read set comes from the same script as dedup, which lists members under
+**COLLECTION MEMBERS** with each member's `type` and key (`slug`/`id`) from its frontmatter.
+Read frontmatter first; open a body only when the frontmatter cannot settle it.
+
+Three outcomes, and the default is the important one:
+
+| The collection… | Do this | `member_resolution` |
+|---|---|---|
+| **has a member this fact is clearly about** | Retarget the chunk at that member's path. It becomes an ordinary file target. | `resolved` |
+| **has no member this fact is about** | Leave the target as the folder. Promotion creates a new member. | `created` |
+| **has a member this *might* be about** | **Create.** Leave the target as the folder, and record what it nearly matched. | `created-near-match` |
+
+**Ambiguity resolves to CREATE — never to merge.** A spurious new member is visible on disk
+and named at the checkpoint; a wrong merge is buried inside a file nobody re-reads. Those
+errors are not equal. Set `member_near_match` to the member you rejected so the human can
+overturn it at the gate with `retry` — a near-match is flagged **NEAR-MATCH** and sorts to the
+top of its group, because nothing downstream re-examines this judgement.
+
+This is also why the default is safe: creating is *adding*, and **ingestion only ever adds.**
+Silently merging a fact into an existing member would be the one place ingestion edited
+something a human had already accepted.
+
+**If a collection directory cannot be read, the run stops.** An unreadable folder yields zero
+members, which is indistinguishable from an empty one — and would resolve every chunk to
+CREATE, manufacturing duplicates of members that were already there.
 
 ## Stage 3.5 — Dedup against canonical context *and* unpromoted staging
 
@@ -471,6 +520,7 @@ The facts now sit in staging, waiting for a separate, human-initiated promotion.
 1  ingest                 transcript in, unmodified, never persisted unless `archived`
 2  distill                typed chunks, decided/undecided, most of the transcript discarded
 3  propose placements     INDEXES ONLY -- target + legal edges + confidence
+3.4 resolve members       COLLECTIONS ONLY -- which member? ambiguous -> CREATE, flag it
 3.5 dedup                 read ONLY the targets routing chose; drop dupes, flag conflicts
 4a checkpoint             overview grouped by destination (riskiest group first), then
                           the reviewer picks a mode; approve / retry <id> / drop <id>  (THE human gate)

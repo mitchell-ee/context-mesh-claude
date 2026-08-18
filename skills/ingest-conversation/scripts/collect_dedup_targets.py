@@ -57,6 +57,18 @@ import sys
 # a default, not a tuned value: it is roughly "more than a couple of un-drained ingestions".
 POOL_WARN_AT = 50
 
+# Above this many members in one collection, say so. Same footing as POOL_WARN_AT: a nudge,
+# never a block. This bound is the honest cost of member resolution -- the CANONICAL set is
+# chunk-bounded, but a chunk routed to a collection expands to that folder's members, so the
+# read is FOLDER-bounded and grows with the folder rather than the transcript.
+#
+# Scoping this read by guessing at filenames was considered and REJECTED, for the reason the
+# staged pool gives above: a scoped read fails silently, a size warning fails loudly. It would
+# also break the taxonomy's rule that a member pattern is opaque -- used to GENERATE a name,
+# never parsed to read meaning out of an existing one (docs/file-taxonomy.md). Frontmatter is
+# read first and bodies only on demand, which is what keeps the constant small.
+COLLECTION_WARN_AT = 40
+
 FM = re.compile(r"^---\s*\n(.*?)\n---", re.S)
 FM_KEY = re.compile(r"^([a-z_-]+):\s*(.*)$")
 
@@ -79,6 +91,57 @@ def parent_dir_exists(hub_root, target_path):
     """Does the directory this target names exist? Distinguishes 'a new file in a known
     location' (fine) from 'a path into nowhere' (a bug that would make dedup fail open)."""
     return os.path.isdir(os.path.dirname(os.path.join(hub_root, target_path)))
+
+
+def is_collection_target(target_path):
+    """A trailing slash means routing chose a FOLDER, not a file.
+
+    The same one-character signal `classify_candidates.py` and `check_setup.py` use. It is the
+    whole discriminator on purpose: nothing here knows what a persona is, or an ADR. A
+    collection is a folder of same-typed files, and which folders those are is the mesh's
+    business, not this script's.
+    """
+    return target_path.endswith("/")
+
+
+def collect_members(hub_root, target_path):
+    """Return (members, unreadable) for one collection target.
+
+    Each member is {path, frontmatter}. FRONTMATTER ONLY -- bodies are not read here. Member
+    resolution asks "which of these is this fact about?", and for a keyed member (a persona's
+    `slug`, a typed artifact) the frontmatter answers it. Reading every body to decide would
+    make the cost of routing to a collection scale with the SIZE of its members, not just
+    their count, and persona files are explicitly hundreds of lines.
+
+    FAILS CLOSED, and for a reason this project has now paid for repeatedly: a collection
+    directory that exists but cannot be read must not come back as "no members". That is
+    indistinguishable from an empty collection, and it would resolve every chunk to CREATE --
+    silently manufacturing a duplicate member of a folder that already had the right one.
+    Same shape as fail-open #12, where `os.walk` swallowing OSError made a guard unreachable.
+    Listed here, checked by the caller, never guessed at.
+    """
+    members, unreadable = [], []
+    full_dir = os.path.join(hub_root, target_path)
+
+    try:
+        names = sorted(os.listdir(full_dir))
+    except OSError as exc:
+        unreadable.append((full_dir, str(exc)))
+        return members, unreadable
+
+    for f in names:
+        if not f.endswith(".md"):
+            continue
+        path = os.path.join(full_dir, f)
+        try:
+            with open(path) as fh:
+                text = fh.read()
+        except OSError as exc:
+            unreadable.append((path, str(exc)))
+            continue
+        members.append({"path": path, "frontmatter": read_frontmatter(text)})
+
+    return members, unreadable
 
 
 def find_staging_dirs(hub_root):
@@ -270,7 +333,25 @@ def main():
         targets.setdefault(tp, []).append(cid)
 
     existing, new_file, unresolvable = [], [], []
+    collections, coll_unreadable = [], []
     for tp in sorted(targets):
+        # A COLLECTION target resolves to its members, not to one file. Without this branch
+        # `resolve()` returns exists=False for the directory while `parent_dir_exists()`
+        # returns True, so the target classified as "a new file in a known location" and
+        # dedup compared the chunk against NOTHING -- every member of the folder invisible.
+        # A fact about an existing persona could not be caught as a duplicate, because the
+        # only file that could have shown it was never in the read set. Confirmed by running
+        # it against `product/personas/` before this branch existed.
+        if is_collection_target(tp):
+            full_dir = os.path.join(hub_root, tp)
+            if not os.path.isdir(full_dir):
+                unresolvable.append((tp, targets[tp], full_dir))
+                continue
+            members, unread = collect_members(hub_root, tp)
+            coll_unreadable.extend(unread)
+            collections.append((tp, members, targets[tp]))
+            continue
+
         full, exists = resolve(hub_root, tp)
         if exists:
             existing.append((tp, full, targets[tp]))
@@ -289,6 +370,9 @@ def main():
     if not explain:
         for _, full, _ in existing:
             print(full)
+        for _, members, _ in collections:
+            for m in members:
+                print(m["path"])
         for row in staged:
             print(row["path"])
         if unresolvable:
@@ -296,19 +380,32 @@ def main():
                 print(f"error: cannot resolve target '{tp}' (chunks: {', '.join(ids)})",
                       file=sys.stderr)
                 print(f"    no such directory for: {full}", file=sys.stderr)
+        # "cannot read" without naming staging: this list also carries walk errors from
+        # `find_staging_dirs`, which walks the WHOLE Hub looking for staging dirs and so
+        # reports any unreadable directory it meets on the way -- a collection included.
+        # Calling all of them "staging" mislabels a real error, which is its own small
+        # fail-open: the operator fixes the wrong directory.
         for path, err in unreadable:
-            print(f"error: cannot read staging: {path} ({err})", file=sys.stderr)
-        if unresolvable or unreadable:
+            print(f"error: cannot read: {path} ({err})", file=sys.stderr)
+        # An unreadable COLLECTION is an error on the same terms as unreadable staging: it
+        # would otherwise read as an empty folder and resolve every chunk to CREATE.
+        for path, err in coll_unreadable:
+            print(f"error: cannot read collection member: {path} ({err})", file=sys.stderr)
+        if unresolvable or unreadable or coll_unreadable:
             return 1
         return 0
 
-    print(f"Dedup read set: {len(existing)} canonical file(s) + {len(staged)} staged "
-          f"candidate(s).")
+    n_members = sum(len(m) for _, m, _ in collections)
+    print(f"Dedup read set: {len(existing)} canonical file(s) + {n_members} collection "
+          f"member(s) + {len(staged)} staged candidate(s).")
     print(f"  CANONICAL: bounded by {len(chunks)} chunk(s) -- routing chose these targets "
           f"from the index.")
+    if collections:
+        print(f"  MEMBERS:   bounded by the {len(collections)} collection(s) routing chose "
+              f"-- folder-bounded, not chunk-bounded.")
     print("  STAGED:    bounded by the unpromoted pool -- earlier ingestions, not yet "
           "promoted.")
-    print("Read both sets and nothing else.")
+    print("Read these sets and nothing else.")
     print()
 
     if existing:
@@ -318,6 +415,34 @@ def main():
             print(f"      -> {full}")
             print(f"      chunks routed here: {', '.join(ids)}")
         print()
+
+    if collections:
+        print("READ THESE -- COLLECTION MEMBERS (routing chose the FOLDER; decide which "
+              "member):")
+        for tp, members, ids in collections:
+            print(f"  {tp}  ({len(members)} member(s))")
+            print(f"      chunks routed here: {', '.join(ids)}")
+            for m in members:
+                fm = m["frontmatter"]
+                key = fm.get("slug") or fm.get("id") or ""
+                label = f"{fm.get('type', '?')}" + (f" {key}" if key else "")
+                print(f"      {os.path.basename(m['path']):40} {label}")
+            if not members:
+                print("      (empty collection -- every chunk here CREATES a new member)")
+        print()
+        print("  MODIFY an existing member, or CREATE a new one. When the match is")
+        print("  ambiguous, CREATE and flag the near-match at the checkpoint: a spurious")
+        print("  new member is visible on disk and at the gate, while a wrong merge is")
+        print("  buried in a diff. Do not merge on a maybe.")
+        print()
+
+    for tp, members, _ in collections:
+        if len(members) >= COLLECTION_WARN_AT:
+            print(f"NOTE: collection `{tp}` has {len(members)} members (warn at "
+                  f"{COLLECTION_WARN_AT}).")
+            print("  Not an error. This read is folder-bounded, so it grows with the folder")
+            print("  rather than the transcript -- the one read here that does.")
+            print()
 
     if staged:
         print("READ THESE -- STAGED (unpromoted claims an earlier ingestion already made):")
@@ -354,7 +479,7 @@ def main():
 
     if unreadable:
         print()
-        print("UNREADABLE STAGING -- dedup cannot run, and that is an error:")
+        print("UNREADABLE -- dedup cannot run, and that is an error:")
         for path, err in unreadable:
             print(f"  {path}")
             print(f"      {err}")
@@ -372,7 +497,18 @@ def main():
         print("An unresolved target looks exactly like 'no duplicates found'. Fix the")
         print("target path or the Hub root before writing anything.")
 
-    if unresolvable or unreadable:
+    if coll_unreadable:
+        print()
+        print("UNREADABLE COLLECTION -- member resolution cannot run, and that is an error:")
+        for path, err in coll_unreadable:
+            print(f"  {path}")
+            print(f"      {err}")
+        print()
+        print("An unreadable collection yields zero members, which looks exactly like an")
+        print("empty folder -- so every chunk would CREATE, silently duplicating a member")
+        print("that is already there. Fix access before writing anything.")
+
+    if unresolvable or unreadable or coll_unreadable:
         return 1
 
     return 0

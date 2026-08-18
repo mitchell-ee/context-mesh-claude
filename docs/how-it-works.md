@@ -199,10 +199,17 @@ on disk — both are just a folder of markdown files — and only the referencin
 the index would grow forever, every new ADR would mean editing the index, and fourteen rows
 would say nearly the same thing. One row for the folder says it once.
 
-**Personas are the interesting edge case.** They look exactly like a collection — one file per
-persona, in a folder. But story files name a persona *by its slug*, which is a reference
-someone follows, so personas answer **yes** to the question above and are treated as kind 2.
-If you rename a persona file, something breaks. If you rename an ADR, nothing does.
+**So how does a new fact know which member it belongs to?** It doesn't, from the index alone —
+the row describes the folder. After ingestion picks the folder, a second step looks inside it
+and decides: does this modify an existing member, or create a new one? If the answer is
+genuinely unclear, **it creates a new one and flags it for you at the checkpoint**, naming the
+member it nearly matched. A spurious new file is easy to spot and easy to fix; a fact quietly
+merged into the wrong persona is not.
+
+**Personas are a collection, with one thing worth knowing.** One file per persona, in a folder,
+declared exactly like any other collection. But story files name a persona *by its slug*, so
+**renaming a persona file breaks something; renaming an ADR does not.** That is a fact about
+what your content points at, not a different kind of home — you declare both the same way.
 
 ### Canonical vs. staging
 

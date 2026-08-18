@@ -130,6 +130,13 @@ def flags(chunk):
         out.append("CONTRADICTS")
     if chunk.get("duplicate_of"):
         out.append("DUPLICATE")
+    # Collection member resolution (stage 3.4). `NEW MEMBER` is routine and not flagged --
+    # it is what most collection chunks do. `NEAR-MATCH` is flagged because it is the case
+    # most likely to be WRONG: resolution found a plausible member, was not confident, and
+    # created rather than merged. Nothing downstream re-examines that judgement, so if it is
+    # not caught here it is not caught at all.
+    if chunk.get("member_resolution") == "created-near-match":
+        out.append("NEAR-MATCH")
     return out
 
 
@@ -185,6 +192,17 @@ def render_chunk_full(c, indent="    "):
             print(f"{indent}  {line}")
     if c.get("rationale"):
         print(f"{indent}  why: {c['rationale']}")
+    # What member resolution decided, and -- for a near-match -- WHAT it nearly matched.
+    # Naming the rejected member is the point: "created a new persona" is not reviewable,
+    # "created a new persona, but `first-time-buyer` was close" is.
+    mr = c.get("member_resolution")
+    if mr == "resolved":
+        print(f"{indent}  member: MODIFY existing -> {c.get('member_path', '?')}")
+    elif mr == "created":
+        print(f"{indent}  member: CREATE new (no existing member matched)")
+    elif mr == "created-near-match":
+        near = c.get("member_near_match") or "?"
+        print(f"{indent}  member: CREATE new -- but `{near}` was close. Merge instead?")
     edges = c.get("edges", [])
     if edges:
         es = ", ".join(f"{e.get('edge')}->{e.get('target')}" for e in edges)

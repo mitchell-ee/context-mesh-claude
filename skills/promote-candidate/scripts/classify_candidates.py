@@ -123,6 +123,19 @@ def classify(fm, body):
                           "justifying row in one motion). Ordinal patterns number by reading "
                           "the directory, so run promotion single-threaded.")
 
+    # A candidate whose target is a collection MEMBER (`.../personas/first-time-buyer.md`)
+    # falls through to MERGE below, and needs no branch of its own: by the time it is here,
+    # ingestion's stage 3.4 has already chosen the member, and the target is an ordinary file
+    # path that MERGE handles like any other.
+    #
+    # A member that has since been renamed or deleted needs no branch either, and a check for
+    # it was written and then REMOVED. It cannot distinguish a vanished member from a pending
+    # home -- both are "a target whose file is absent but whose directory exists" -- so it
+    # would have downgraded every pending home, which is the fail-CLOSED shape v2.5 found
+    # (reporting broken when it isn't). Promotion already does the right thing: step 0 of the
+    # merge flow creates a missing target, and for a collection member that is exactly the
+    # APPEND outcome under a name the human already approved at the checkpoint.
+
     return "MERGE", "The claim lands in a section of the target file."
 
 

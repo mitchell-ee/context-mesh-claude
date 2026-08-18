@@ -70,6 +70,39 @@ domain while missing the real one. A folder named `product/` at the root is the 
 product tree; a folder named `product/` under `domains/checkout/` is that domain's. Nothing
 else needs deciding.
 
+## The three kinds of context home
+
+**Start here.** Everything ingestion can route to is one of three kinds. Declaring a home
+correctly in the index is all that is required to make content flow to it:
+
+| Kind | Looks like | New content… | Declare it as |
+|---|---|---|---|
+| **Singleton** | `technical/architecture.md` | merges into the file | a row in the **File** table |
+| **Collection** | `product/personas/`, `docs/decisions/` | modifies an existing member **or** creates a new one | a row in the **Collections** table, path ending `/` |
+| **Known structure** | `opportunity-solution-tree/`, `iterations/` | follows that structure's own rules | nothing — the plugin already knows it |
+
+**How to choose.** Ask *how many of this thing will there be?*
+
+- **One** — a singleton. Architecture, coding standards, a glossary.
+- **Many, of the same kind** — a collection. Personas, ADRs, journey maps. One index row
+  covers the whole folder, so adding the tenth persona is not an index edit.
+- **A structure the plugin knows** — discovery artifacts (opportunities, solutions, stories,
+  epics). These are IDs with a parent chain the tooling walks, so their layout is fixed and
+  you do not declare it.
+
+**When a collection is the right call but the names matter.** Some collections have members
+that other files point at — a `Story` names a persona by its slug, so renaming
+`first-time-buyer.md` breaks that reference. It is still a collection and declared the same
+way; just know that renaming a member there is a real change, not a cosmetic one. If nothing
+points at a member (ADRs are the usual case), rename freely.
+
+> **A note on `manifest` vs. `framework`.** Older versions of these docs sorted every home into
+> one of those two words. It answered a question about *this project's* design — which parts a
+> client may change — not a question anyone setting up a mesh actually has. The three kinds
+> above are what matters in practice. The distinction still appears further down where it
+> explains why the discovery-artifact shape is fixed; it is background, not something to learn
+> before declaring a home.
+
 ## How to read this
 
 Every file sits on two axes, plus three attributes that decide its storage mechanics:
@@ -168,10 +201,13 @@ routing logic changes with them.
 
 **The line is drawn by addressing, not by cardinality** (restated 2026-08-17; it used to read
 *"singletons referenced by path"*, which was true only while every path-addressed thing
-happened to be a singleton). A **collection** is many files and still manifest, because nothing
-traverses its members. **Personas are the exception that proves the rule** — a collection by
-shape, but framework, because `Story` files name personas *by slug*, so the slug is traversed
-and cannot be renamed freely.
+happened to be a singleton). A **collection** is many files and still varies per client,
+because the tooling does not depend on its layout.
+
+**Personas do not need an exception here** (revised 2026-08-18). They are a collection whose
+member names other files happen to point at — worth knowing before renaming one, and not a
+different kind of home. Sorting them onto one side of this line was what forced the exception
+prose; see [Personas](#personas--a-collection-whose-member-names-are-referenced-revised-2026-08-18).
 
 The lists below are therefore the **default manifest** — a "pretty good" starting set,
 generalized from one real engagement's context list plus the aiviz discovery structure.
@@ -215,7 +251,7 @@ grows enough to hurt progressive disclosure).
 | File | About | Generalized from |
 |---|---|---|
 | `product/business-context.md` | Why this product/system exists; business problems solved; who depends on it; value delivered | "Business Context & Purpose" |
-| `product/personas/{slug}.md` | Customer/stakeholder personas — **one file each**, keyed by `slug`. See [Personas](#personas--one-file-each-keyed-by-slug-revised-2026-07-30--framework-fixed) below: this is the one Layer-A entry that is *framework*, not manifest. | — |
+| `product/personas/` | Customer/stakeholder personas — a **collection**, one file per persona keyed by `slug`. See [Personas](#personas--a-collection-whose-member-names-are-referenced-revised-2026-08-18) below: declared like any other collection, but member names are referenced by `Story` files, so renaming one is a real change. | — |
 | `product/design-principles.md` | Product values and how tradeoffs get resolved | aiviz `principles.md`, ee-pm `principles.md` |
 | `product/glossary.md` | Domain terms, shared vocabulary | aiviz `glossary.md` |
 | `product/product-strategy.md` | Where the product is going: direction, bets, what it will and won't become | ee-pm |
@@ -291,20 +327,25 @@ as many times as there are files. A collection row says it once.
 
 ### What tells the three kinds apart
 
-**Does anything follow a reference to a specific file in the folder?** That one question
-decides it, and it is the same question that makes personas framework:
+**Does anything follow a reference to a specific file in the folder?**
 
-| Kind | Shape | Traversed? | Side |
+| Kind | Shape | Traversed? | Layout fixed? |
 |---|---|---|---|
-| **Singleton** | one file | n/a | manifest |
-| **Collection** | folder of same-typed files | **no** | manifest |
-| **Discovery artifact** | folder of same-typed files | **yes**, by ID | framework |
+| **Singleton** | one file | n/a | no |
+| **Collection** | folder of same-typed files | **no**, usually | no |
+| **Discovery artifact** | folder of same-typed files | **yes**, by ID | **yes** |
 
-Collections and discovery artifacts are **the same storage shape** and differ only in that
-answer. A collection is inert: nothing validates a member's name, so the manifest may add,
-rename, or drop a collection freely. **Personas are a collection by shape but framework by
-traversal** — `Story` files name them by slug — which is why they get their own section below
-rather than being declared as one.
+Collections and discovery artifacts are **the same storage shape**. What separates them is
+that a discovery artifact's ID and parent chain are what the graph *traverses* — so its layout
+is fixed and the tooling knows it, while a collection can be added, renamed, or dropped freely.
+
+**"Usually" is doing real work in that table, and personas are why.** A persona is a
+collection, declared like any other — but `Story` files name personas by slug, so those member
+names *are* traversed. This does not make personas a fourth kind and does not change how they
+are declared; it means renaming a member is a real change there. Earlier drafts treated this as
+an exception that needed its own category, which produced three sections of prose to explain a
+case users would describe in four words: *a folder of personas.* The traversal is a property of
+what a given mesh's content points at, not a property of the storage kind.
 
 ### How a collection is declared
 
@@ -340,6 +381,31 @@ filename**. That is what keeps collections on the manifest side: the moment some
 data from a member's name, the pattern has become schema and the collection has quietly become
 framework.
 
+### Modify an existing member, or create a new one (added 2026-08-18)
+
+A collection is the one kind where routing does **not** finish the job. Routing reads the index
+and the index describes the *folder*, so it can tell that a fact is an architecture decision
+without telling which decision. Deciding that is a separate step — **member resolution**,
+ingestion stage 3.4 — which runs after the folder is chosen and reads that folder's members.
+
+This does not weaken index-only routing, for the same reason dedup does not: the folder is
+already fixed, so reading its members cannot change where the chunk goes. What stays forbidden
+is reading *to* route.
+
+**Ambiguity resolves to CREATE.** If a fact clearly belongs to an existing member, it modifies
+that member. If it clearly does not, it creates a new one. If it *might* belong to an existing
+member, it **creates**, and the near-match is flagged at the checkpoint for a human to
+overturn. A spurious new member is visible on disk and named at the gate; a wrong merge is
+buried in a file nobody re-reads. Those errors are not equal.
+
+This is also what keeps ingestion's core invariant true: **ingestion only ever adds.** Creating
+is adding. Silently merging into a member a human already accepted would be the one place
+ingestion edited existing content.
+
+**The cost is honest and worth stating:** this read is *folder*-bounded, not chunk-bounded — a
+chunk routed to a 40-member collection expands to 40 reads. Frontmatter is read first, bodies
+only on demand, and the tooling warns past a threshold rather than silently scoping the read.
+
 ### Rules
 
 - **An empty declared collection is a NOTE, not an error.** Same reasoning as a pending home:
@@ -361,14 +427,22 @@ framework.
 
 ---
 
-## Personas — one file each, keyed by `slug` (revised 2026-07-30) — *framework, fixed*
+## Personas — a collection whose member names are referenced (revised 2026-08-18)
 
-Every other Layer-A entry is manifest: a path-referenced singleton the loader lists and
-nothing validates. **`Persona` is the exception**, and it always was — `Story` files name
-personas **by slug**, so the slug is traversed, and a story naming a persona that doesn't
-exist is a dangling reference. That puts personas on the framework side of the line this
-document draws at [Why the line falls there](#why-the-line-falls-there): they are *not* inert
-to the type system.
+**Personas are a collection.** Declare them exactly like any other: one row, path ending `/`,
+a `Members` pattern of `{slug}.md`. Nothing about the declaration is special.
+
+The one thing to know is that **their member names are pointed at**: `Story` files name a
+persona by its slug, so a story naming a persona that doesn't exist is a dangling reference,
+and renaming a member is a real change rather than a cosmetic one. That is a fact about what
+this kind of content references — not a different kind of home.
+
+> **This section used to argue personas were an exception** to the manifest/framework split —
+> "a collection by shape but framework by traversal" — and needed three passages elsewhere to
+> keep that consistent. The distinction was never in the code: no script has ever had a persona
+> concept, and `classify_candidates.py` decides collection-ness from a trailing slash alone. A
+> taxonomy that needs that much prose to hold a case users describe in four words is the thing
+> that is wrong. Retired 2026-08-18.
 
 ```
 product/personas/

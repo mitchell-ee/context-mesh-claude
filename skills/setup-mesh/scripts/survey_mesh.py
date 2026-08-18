@@ -24,7 +24,7 @@ Three states, and the middle one is the point:
 Usage:
     survey_mesh.py <hub-root>
     survey_mesh.py <hub-root> --json
-    survey_mesh.py <hub-root> --manifest    # every tracked file, grouped by container
+    survey_mesh.py <hub-root> --manifest    # every tracked home, grouped by container
 
 `--manifest` answers a different question from the triage above: not "where must a human
 look?" but "what does this mesh claim to hold?" -- every file the indexes track, grouped
@@ -158,6 +158,24 @@ def survey_one(repo, hub=False, hub_root=None):
                      f"written: {', '.join('`' + p + '`' for p in missing)}. Promotion "
                      f"creates them. Check none is a typo.")
 
+    # Collections, on the SAME terms the checker uses. Omitting them here was fail-open #14:
+    # this module imports check_setup precisely so the two cannot drift, then called
+    # `find_listed_files`/`find_missing` and neither collection function -- so a mesh whose
+    # only breakage was a collection row pointing at a nonexistent directory got BLOCKED from
+    # check_setup and READY from the survey. That is this project's canary (fail-open #9): two
+    # validators disagreeing about one directory. Verified by running both against an index
+    # whose collection target does not exist.
+    #
+    # The split is the checker's, not restated: MISSING is a problem, EMPTY is a note.
+    collections = check_setup.find_listed_collections(index_text)
+    missing_dirs, empty_dirs = check_setup.check_collections(
+        collections, repo, root=hub_root or repo)
+    for p in missing_dirs:
+        problems.append(f"Index declares the collection `{p}` but no such directory exists.")
+    for p in empty_dirs:
+        notes.append(f"Collection `{p}` is declared but holds no .md members yet -- a "
+                     f"pending home for a whole kind of context, not an error.")
+
     # Two different kinds of missing thing, and conflating them is what makes a survey
     # useless at scale:
     #   needs      -- CONTAINERS. scaffold_domain.py creates them unattended.
@@ -197,12 +215,20 @@ def survey_one(repo, hub=False, hub_root=None):
     # `listed` is what does the discriminating, and it is links, not table rows: how many
     # distinct local paths the index points at. A table row without a markdown link is
     # invisible here, deliberately (fail-open #9).
-    if "SCAFFOLD:" in index_text and not listed:
+    #
+    # `listed` alone is NOT the discriminator: a collection row is a real context home, so an
+    # index declaring only collections lists something and must not be called empty. Both
+    # branches test files-or-collections for that reason (part of fail-open #14 -- the same
+    # omission, in its fail-CLOSED direction: reporting "routing can see nothing here" about
+    # an index routing can read perfectly well).
+    routable = listed or collections
+    if "SCAFFOLD:" in index_text and not routable:
         asks.append("index entries (what each file is about, and when to load it)")
         notes.append("Index is a scaffold stub -- it lists nothing, so routing can see "
                      "nothing here. Honest, but empty until someone fills it in.")
-    elif not listed:
-        notes.append("Index lists no context files -- routing can see nothing here.")
+    elif not routable:
+        notes.append("Index lists no context files or collections -- routing can see "
+                     "nothing here.")
 
     if problems:
         state = "BLOCKED"
@@ -257,6 +283,14 @@ def manifest(hub_root):
             tracked.append({"path": rel,
                             "exists": os.path.isfile(os.path.join(path, rel))})
 
+        # Collections are tracked homes too, listed as the folder they are -- one entry per
+        # row, never one per member, which is the entire point of a collection row.
+        collections = [c for c in check_setup.find_listed_collections(text)
+                       if not check_setup.escapes_root(path, c, hub_root)]
+        for rel in collections:
+            tracked.append({"path": rel, "collection": True,
+                            "exists": os.path.isdir(os.path.join(path, rel))})
+
         # Present-but-unlisted: exists on disk, invisible to routing. Same walk the checker
         # does, kept to the three canonical subtrees.
         #
@@ -272,6 +306,18 @@ def manifest(hub_root):
         prefix = {"outcome": "OUTCOME", "opportunity": "OPP", "solution": "SOL",
                   "assumption": "ASSUMPTION", "story": "STORY", "epic": "EPIC"}
 
+        # A COLLECTION MEMBER is not untracked -- its folder's row covers it. Without this,
+        # a correctly declared collection reports every member as "invisible to routing" and
+        # advises adding the per-file rows collections exist to remove. It was masked in
+        # test-mesh only because that index happens to link each persona individually as
+        # well; a plain ADR folder would have shown every member as untracked.
+        collection_dirs = [os.path.normpath(c) for c in collections]
+
+        def in_collection(rel):
+            parent = os.path.dirname(os.path.normpath(rel))
+            return any(parent == c or parent.startswith(c + os.sep)
+                       for c in collection_dirs)
+
         untracked = []
         for sub in ("technical", "product", "process"):
             d = os.path.join(path, sub)
@@ -282,7 +328,7 @@ def manifest(hub_root):
                     if not f.endswith(".md"):
                         continue
                     rel = os.path.relpath(os.path.join(root, f), path)
-                    if rel in listed:
+                    if rel in listed or in_collection(rel):
                         continue
                     m = re.search(
                         r"(outcome|opportunity|solution|assumption|story|epic)-(\d{4})",
@@ -292,13 +338,19 @@ def manifest(hub_root):
                     untracked.append(rel)
 
         groups.append({"label": label, "no_index": False,
-                       "tracked": tracked, "untracked": sorted(untracked)})
+                       "tracked": sorted(tracked, key=lambda t: t["path"]),
+                       "untracked": sorted(untracked)})
     return groups
 
 
 def report_manifest(groups):
     total = sum(len(g["tracked"]) for g in groups)
-    print(f"Mesh manifest: {total} tracked file(s) across {len(groups)} container(s)")
+    n_coll = sum(1 for g in groups for t in g["tracked"] if t.get("collection"))
+    # Say "homes", not "files": a collection row is one tracked home covering many files, so
+    # calling the total a file count would misdescribe it. Same rule as the checker's verdict
+    # -- a count must not claim more than it counted.
+    print(f"Mesh manifest: {total} tracked home(s) across {len(groups)} container(s)"
+          + (f", {n_coll} of them collection(s)" if n_coll else ""))
     print()
     print("Read this to check what the mesh CLAIMS to hold against what you expect it to.")
     print("Routing can see the tracked files and nothing else.")
@@ -312,11 +364,15 @@ def report_manifest(groups):
 
         print(f"{g['label']} — {len(g['tracked'])} tracked")
         if not g["tracked"]:
-            print("    (nothing tracked — the index lists no context files)")
+            print("    (nothing tracked — the index lists no context files or collections)")
         for t in g["tracked"]:
             # "pending", not "MISSING": the row is a declared home that nobody has written
             # yet, which is a normal state promotion resolves -- not a broken link.
-            print(f"    {'ok     ' if t['exists'] else 'pending'} {t['path']}")
+            # A collection is marked, because "ok" against a folder means the DIRECTORY is
+            # there and says nothing about its members -- a distinction an unmarked row would
+            # hide behind identical output.
+            mark = "  [collection]" if t.get("collection") else ""
+            print(f"    {'ok     ' if t['exists'] else 'pending'} {t['path']}{mark}")
         for u in g["untracked"]:
             print(f"    unlisted {u}")
         print()
@@ -343,7 +399,10 @@ def report_manifest(groups):
         # is the normal state of a fresh scaffold, so it is not an error; but it must not
         # be reported in words that sound like a clean bill of health.
         if total:
-            print(f"All {total} tracked file(s) exist, every context file is tracked, and")
+            # "home(s)", not "file(s)": for a collection this line means the DIRECTORY is
+            # there. It says nothing about whether any member exists -- an empty collection
+            # is a note the survey raises, not something this verdict has checked.
+            print(f"All {total} tracked home(s) exist, every context file is tracked, and")
             print("nothing is pending.")
         else:
             print("NOTHING IS TRACKED anywhere in this mesh, so there is nothing to check.")
