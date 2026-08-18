@@ -1,6 +1,6 @@
 # context-mesh
 
-**The structure for where LLM context lives across an organization, and the process for
+**The structure for where LLM context lives across an AI Hub repository, and the process for
 populating it from conversations.** A plain-language overview of what it does today and what's
 next; for the authoritative detail, see the docs linked at the end (or start with
 [`docs/vocabulary.md`](docs/vocabulary.md), the locked schema everything references).
@@ -10,9 +10,9 @@ next; for the authoritative detail, see the docs linked at the end (or start wit
 ## The problem it solves
 
 Durable engineering knowledge — a decision from a meeting, how a service really behaves, a
-newly-spotted product gap — rarely gets written down where it belongs. Meanwhile every AI
+newly-spotted product gap — is difficult to capture and then quickly store in a project's context layer. Meanwhile every AI
 coding tool in the org is starving for exactly that context, and each repo knows only about
-itself. In a big estate (the seeding client has ~100 service repos, no monorepo) there is no
+itself. In a big estate there is no cohesive
 shared brain.
 
 context-mesh is that shared brain: a well-defined home for scattered knowledge, plus a
@@ -20,16 +20,15 @@ repeatable way to get knowledge out of conversations and into that home without 
 hand.
 
 - **AI-tool-agnostic.** Everything it stores is plain markdown any tool or human can read —
-  Claude, Cursor, Copilot, or whatever comes next. A hard constraint, not a preference.
-- **Progressive disclosure.** Each file is small and single-purpose; an index says what exists
-  and when it's relevant. An assistant reads only the files a task needs, never the whole
-  corpus.
+  Claude, Cursor, Copilot, or whatever comes next (although this particular plugin has been published from that tool-agnostic source specifically for Claude Code). 
+- **Progressive disclosure.** Each file is intended to be small and single-purpose; an index says what exists
+  and when it's relevant. An assistant reads only the files a task needs.
 
 ---
 
 ## Where context lives: the Hub, and only the Hub
 
-**All context lives in the AI Hub — one repo.** Context sits on two axes: **what it's about**
+**All context lives in the AI Hub — one repo.** Context is ideally located by **what it's about**
 (product / technical / process) and **its scope** — *cross-cutting* (at the Hub root, governing
 everybody) or *domain* (inside one domain folder, about one thing).
 
@@ -37,22 +36,22 @@ A **domain** is a namespace, not necessarily a code repository: it may map 1:1 t
 several, or be finer than one. All Hub content, domain-specific included, is readable by
 everyone. The invariant is **one home per fact, authored once, never mirrored**.
 
-**Two things vary, and they are independent of each other:**
+**Two things vary independently:**
 
 - **The Hub may be its own repo, or it may be the code repo.** Across many repos it is usually
-  its own, and those code repos hold no context. **In a monorepo the Hub root is the repo
+  standalone, and the code repos hold no context. **In a monorepo the Hub root is the repo
   root** — `context-index.md` sits beside `package.json`, and Hub-relative paths are just
   repo-relative paths.
 - **Domains are optional.** A Hub whose context is entirely cross-cutting has no `domains/`
-  directory at all, and that is a **complete mesh**. Nothing will report it as unfinished.
+  directory at all, and that is fine.
 
-A multi-repo product will probably carve domains; a monorepo usually won't, having one thing to
+A multi-repo product will probably carve out domains; a monorepo may not, having one thing to
 describe. Either may do the opposite — there is one model with an optional layer, and no
 monorepo mode to configure.
 
 ### Cross-cutting — at the Hub root (shared, changes rarely)
 
-All singletons, referenced by path.
+Here are some examples of the kinds of context artifacts expected in the root of the AI Hub.
 
 | Area | Files |
 |---|---|
@@ -61,6 +60,8 @@ All singletons, referenced by path.
 | **Process & governance** | `process/ways-of-working.md`, `definition-of-done.md`, `review-and-release.md`; `governance/data-handling.md`, `access-control.md`, `compliance.md`, `ai-policy.md`; `capabilities/skill-governance.md` |
 
 ### Domain — in `domains/<domain>/` inside the Hub (specific to that thing/team)
+
+Here are examples of context that may be more domain-specific.
 
 | Kind | Files |
 |---|---|
@@ -101,7 +102,7 @@ vendor-neutral prompt that runs anywhere.
 ### `setup-mesh` — get the Hub ready
 
 Finds or declares each **index** (Hub root and per domain) — the routing input, and the only
-one. It does *not* generate context files; it reports which are missing. A stub the index lists
+one. It does *not* generate context files; it suggests ones that might be missing. A stub the index lists
 but that says nothing is worse than an honest gap.
 
 ### `structure-transcript` — clean up a raw transcript (optional pre-pass)
@@ -109,7 +110,7 @@ but that says nothing is worse than an honest gap.
 Turns a raw transcript from *any* source into a clean, topically-labeled one: merged speaker
 turns, filler and abandoned tangents dropped, secrets redacted.
 
-It ships **twice, on purpose**. `prompts/structure-transcript.md` is a **vendor-neutral markdown
+`prompts/structure-transcript.md` is a **vendor-neutral markdown
 prompt** — no scripts, no vendor packaging — that any LLM can run, or that you can paste into a
 meeting tool (Granola, etc.) as a template. The `structure-transcript` **skill** is a thin
 wrapper that runs that same prompt as `/structure-transcript`. The prompt is the source of
@@ -133,13 +134,13 @@ transcript → distilled typed chunks → proposed placements → checkpoint →
   isn't kept unless nothing else would hold it.
 - **Type each fact** (domain fact, requirement, open question, to-do…) — the type decides where
   it may go.
-- **Propose a home** per fact, reading *only the indexes*. If the index can't place it, that's
+- **Propose a home** per fact, by reading the index. If the index can't place it, that's
   reported, not fudged.
 - **Dedup & conflict-check** against the one chosen target file: already there → skip; says the
   opposite → flag.
 - **Checkpoint** — every placement, grouped by destination file with the riskiest group
   first, then you pick how to review them; `approve` / `retry` / `drop`.
-  This is the gate.
+  This is the human-in-the-loop gate.
 - **Write to staging** on approval. No PR (see below).
 
 ### `promote-candidate` — make staged knowledge official
@@ -148,6 +149,8 @@ The separate, human-initiated step that moves a fact from staging into the canon
 everyone reads. Promotion has five outcomes: **merge** into the target doc, **contradicts** (a
 human decides), **resolve** an open question first, **no home**, or **never** (provenance
 records stay in staging). Edits to the same file are batched into one reviewed change.
+
+Steps before this point ideally occur in a branch, and then are ultimately reviewed as a PR before being merged to main, as a second human checkpoint.
 
 ### Using it, start to finish
 
@@ -165,16 +168,6 @@ records stay in staging). Edits to the same file are batched into one reviewed c
 that's where it earns both its jobs: staging writes are collision-free (new files, unique IDs)
 and already reviewed at the checkpoint, whereas promotion edits shared canonical docs that
 multiple promotions can touch at once.
-
----
-
-## Status
-
-The structure, the vocabulary, and the three-skill loop are built. What is **not yet proven** is
-the loop against real material: ingestion has only run on a synthetic transcript and AI
-coding-session logs (a poor source — retrieval isn't new knowledge). The real target is a
-**multi-person meeting transcript**, where the decision happens in the room and nobody writes it
-down. That end-to-end run is the next milestone, pending a real recording.
 
 ---
 
