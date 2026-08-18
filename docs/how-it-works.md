@@ -1,10 +1,10 @@
 # How context-mesh works
 
-A visual guide for humans: **what happens, in what order, and where a person has to decide
+This is a visual guide for humans to understand **what happens, in what order, and where a person has to decide
 something.** For the type system see [vocabulary.md](vocabulary.md); for where files live see
-[file-taxonomy.md](file-taxonomy.md). This page is the map that connects them.
+[file-taxonomy.md](file-taxonomy.md). This document ties it all together.
 
-Two views:
+Below you'll find two views:
 
 1. **[The lifecycle](#1-the-lifecycle)** — a conversation becoming durable context.
 2. **[Where context lives](#2-where-context-lives)** — the shape it lands in.
@@ -14,10 +14,10 @@ Two views:
 ## 1. The lifecycle
 
 **Read it as three phases.** Setup happens once (then again per domain). Ingestion runs per
-conversation. Promotion runs when someone decides a candidate is worth keeping.
+conversation. Promotion runs when someone decides a batch of candidate changes should be incorporated into the context layer.
 
 **The two diamonds are the only places a human must act.** Everything else is automated, and
-nothing crosses a diamond without a person saying so.
+nothing crosses a diamond without human approval.
 
 ```mermaid
 flowchart TD
@@ -71,9 +71,9 @@ flowchart TD
 
 | Step | What it does | Who decides |
 |---|---|---|
-| **`/setup-mesh`** | Surveys the Hub, scaffolds containers, helps declare each `context-index.md`, migrates a mesh built on an older vocabulary, and reports the manifest. Idempotent — re-run it to add a domain. | A human supplies *what a file is about* and *when to load it*. A script cannot guess those. Migrations edit indexes and report; **moving content is always the human's**. |
+| **`/setup-mesh`** | Surveys the Hub, scaffolds containers, helps declare each `context-index.md`, migrates a mesh built on an older vocabulary, and reports the manifest. Idempotent — re-run it to add a domain. | A human supplies *what a file is about* and *when to load it*. A script cannot guess those. Migrations edit indexes and report; **moving content is always manually accomplished by a human**. |
 | **`/structure-transcript`** | Optional. Turns a raw transcript into a clean, labelled one. **Cleanup and labelling only** — it never assigns a type. Also available as a plain prompt (`prompts/structure-transcript.md`) to run in any tool. | — |
-| **`/ingest-conversation`** | Distils into typed chunks, proposes a placement per chunk, then dedups against the one file routing chose. The transcript itself is never modified. | — |
+| **`/ingest-conversation`** | Distills into typed chunks, proposes a placement per chunk, then dedups/deconflicts against its intended target. The transcript itself is never modified. | — |
 | **The checkpoint** | Every proposed placement, **grouped by destination file**, groups ordered by their riskiest chunk. Then it asks how you want to read them. | **You.** `approve`, `retry <id> <reason>`, or `drop <id>`. |
 | **`staging/candidates/`** | Where approved candidates land. Written directly — no PR. | — |
 | **`/promote-candidate`** | Classifies each candidate and batches by target file, so one document is one edit. | — |
@@ -82,19 +82,14 @@ flowchart TD
 ### Three things worth knowing
 
 **Routing reads the index and only the index.** A file the index doesn't list is invisible —
-ingestion cannot route to it. That constraint is what makes routing testable, and it is why
-setup exists at all. (One exception: dedup opens *the one file routing already chose*, after
-the decision is made, so it cannot influence it.)
+ingestion cannot route to it. (Note: dedup opens and reads the chosen file once the routing choice is made.)
 
-**The checkpoint is a repair gate, not just an approve gate.** It stops the run *while the
-transcript is still in context* — so `retry 3 wrong domain` is cheap. A PR would be an honest
-approve gate and a dishonest repair one: fixing a bad placement by hand means re-deriving the
-routing against a transcript that no longer exists. That's why staging is a direct write and
-the PR sits at promotion, where existing docs get edited and concurrent changes can collide.
+**The checkpoint allows re-routing, not just approval.** It stops the run *while the
+transcript is still in context* — so `retry 3 wrong domain` is cheap. Staging is a direct write to create new change candidates and
+the PR doesn't happen until promotion, where existing docs get edited and concurrent changes can collide.
 
-**"No good home" is a legal answer.** If nothing in the index fits, the run says so —
-`target: null`, with a note on what file would need to exist. Forcing a fact into the nearest
-surviving file is how a taxonomy rots, and the gap is a finding worth having.
+**"No good home" is a legal answer.** If nothing in the index fits, the user is told:
+`target: null`, with a note on what file would be appropriate.
 
 ---
 
@@ -142,69 +137,54 @@ Every file answers two questions, and the layout makes both unambiguous:
 | **Canonical** — decided | `product/business-context.md` | `domains/payments/technical/system-behavior.md` |
 | **Staging** — undecided | `staging/candidates/` | `domains/payments/staging/candidates/` |
 
-**A domain is exactly a directory under `domains/`.** Not a thing that looks like one — the
-path *is* the declaration, so nothing has to detect domain-ness. A folder called `product/` at
+**A domain is a directory under `domains/`. A folder called `product/` at
 the root is the cross-cutting product tree; a folder called `product/` under
-`domains/payments/` is that domain's.
+`domains/payments/` is specific to that domain.
 
 **A domain is a namespace, not necessarily a code repository.** It may map to one repo, span
 several, or be finer than one. **Which domains exist is your choice**; that they own their
 context exclusively, where they exist, is fixed.
 
-**Domains are optional, and so is the Hub having a repo to itself.** Two things vary, and they
-are independent of each other:
+**Domains are optional, and so is the Hub having a repo to itself.** Two things vary independently:
 
 - **Zero domains is a complete mesh.** If all your context is cross-cutting — the usual case
   when there is one product to describe — there is no `domains/` directory and nothing is
   missing. The tooling will not ask you to add one.
-- **The Hub may *be* the code repo.** With many repos, the Hub is usually its own and the code
+- **The Hub may *be* the code repo.** With many repos, the Hub is usually standalone and the code
   repos hold no context. **In a monorepo, the Hub root is the repo root** — `context-index.md`
   sits beside `package.json`, and Hub-relative paths are just repo-relative paths.
 
 So a monorepo mesh is typically the top half of the diagram above and nothing else: a root
 index, the cross-cutting folders, `staging/`. That is the whole structure, correctly set up.
 
-### Three kinds of thing, and how to tell them apart
+### Three kinds context
 
 Context comes in three shapes. You will meet all three in a normal mesh, and picking the right
 one is usually obvious once you know they exist.
 
 **1. A single document.** One file about one subject — `technical/system-behavior.md`,
-`product/business-context.md`. Most context is this. You point at it by its path, and that is
+`product/business-context.md`. Most context is this type. You point at it by its path, and that is
 the end of the story.
 
-**2. A folder of documents that reference each other.** Discovery work is the example:
+**2. A folder of documents.** Architecture decision records are the
+example: `decisions/001-gcp-dev-region-us-east1.md`, `002-…`, and so on. They are all the same
+kind of thing, more arrive over time, and each is its own file. We call this a **collection**. You point at the *folder*, not at any individual member.
+
+**3. A folder of documents that reference each other.** This is a custom context type produced by the EE PM Workflow plugin (ee-pm, found in the same Claude Code marketplace as context-mesh) Some examples include
 opportunities, solutions, and stories, each in its own file, each carrying an ID like
 `OPP-0042`. A story says which solution it belongs to *by that ID*, so the files form a chain
 you can follow. The IDs and folder names are fixed by the framework, because the chain breaks
-if they move.
-
-**3. A folder of documents that nothing references.** Architecture decision records are the
-example: `decisions/001-gcp-dev-region-us-east1.md`, `002-…`, and so on. They are all the same
-kind of thing, more arrive over time, and each is its own file — but nothing points at a
-specific one. We call this a **collection**. You point at the *folder*, not at any member.
-
-**The one question that separates 2 from 3: does anything follow a reference to a specific
-file in the folder?**
-
-- **Yes** → it is a discovery artifact. It needs IDs, the structure is fixed, and tooling
-  checks the references still resolve.
-- **No** → it is a collection. You choose the folder, you choose the file-naming convention,
-  and nothing validates a member beyond "the folder exists."
-
-That is the whole test. It is worth applying deliberately, because kinds 2 and 3 look identical
-on disk — both are just a folder of markdown files — and only the referencing tells them apart.
+if they move. You will likely only need this type if you use ee-pm.
 
 **Why not list every file individually?** You could give each ADR its own row in the index, but
 the index would grow forever, every new ADR would mean editing the index, and fourteen rows
-would say nearly the same thing. One row for the folder says it once.
+would say nearly the same thing. One row for the folder is more efficient.
 
 **So how does a new fact know which member it belongs to?** It doesn't, from the index alone —
 the row describes the folder. After ingestion picks the folder, a second step looks inside it
 and decides: does this modify an existing member, or create a new one? If the answer is
 genuinely unclear, **it creates a new one and flags it for you at the checkpoint**, naming the
-member it nearly matched. A spurious new file is easy to spot and easy to fix; a fact quietly
-merged into the wrong persona is not.
+member it nearly matched. A spurious new file is easy to spot and easy to fix.
 
 **Personas are a collection, with one thing worth knowing.** One file per persona, in a folder,
 declared exactly like any other collection. But story files name a persona *by its slug*, so
@@ -216,26 +196,23 @@ what your content points at, not a different kind of home — you declare both t
 The distinction the whole system turns on:
 
 - **Canonical** — decided facts. What the LLM should believe.
-- **Staging** — proposed, contradictory, or still in play. Nothing here is believed yet.
+- **Staging** — proposed, contradictory, or still in play. Nothing here is yet part of the context layer.
 
 A candidate never disappears when promoted. It stays in staging marked `state: canonical`, as
-the **audit trail**: the context file states the fact, the candidate records *how we know it* —
-which conversation, who raised it, when. That provenance chain is what the project exists to
-preserve.
+the **audit trail**: the context file states the fact, the candidate records where it came from —
+which conversation, who raised it, when. That provenance chain is preserved.
 
 ---
 
 ## What the mesh deliberately does not do
 
-- **It does not track work.** No queues, no backlogs, no action items. A queue is the work
+- **It does not currently track work.** No queues, no backlogs, no action items. A queue is the work
   itself, not context about it, and every team tracks work differently. Ingestion *notices*
-  action items and reports them; filing them is yours. (This was designed and built, then
-  deliberately deferred; it may return as a future feature.)
+  action items and reports them. Work items may be handled in the future, however (note that we've aspirationally mentioned stories elsewhere in this document). 
 - **It does not generate context files.** Setup creates *containers* — directories and an empty
   index — never a file the index claims holds something. **An absent file is an honest gap; an
   empty listed one is a lie the tooling believes.**
 - **It does not store raw transcripts** by default. It points at them where they already live.
-  The exception is `source_kind: archived`, when nothing else will hold it.
 - **It does not file anything outward on its own.** The PR is where the skills stop.
 
 ## Where to go next
