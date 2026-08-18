@@ -106,7 +106,7 @@ DUPLICATE_OF_KEY = re.compile(r"^duplicate_of:\s*(\S+)\s*$", re.M)
 # (2026-07-30) -- a workflow pointing at a nonexistent directory passed clean, because the
 # walker read `edges:`, `parent-*:` and `target:` and nothing else. If workflows return, the
 # pointer is the entire value of a pointer type, so the reference must be walked with it.
-# The design is retained privately.
+# The mesh holds context, not work.
 
 
 def parse_edges(text):

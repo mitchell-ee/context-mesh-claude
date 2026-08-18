@@ -18,7 +18,7 @@ old "six" was right.)
 
 A sixth verb, HANDOVER, existed through v2.1: the target was a Workflow, so the item belonged
 in Jira/Linear and the mesh handed it over rather than filing it. The workflow layer is
-deferred as of v2.2; the design is retained privately.
+deferred as of v2.2: the mesh holds context, and a queue is the work itself.
 
 Candidates ingestion linked as duplicates are grouped, not re-judged: a `duplicate_of`
 pointing at another candidate means an earlier ingestion already made this claim, and dedup

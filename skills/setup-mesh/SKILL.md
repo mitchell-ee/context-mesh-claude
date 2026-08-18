@@ -30,10 +30,8 @@ Runs **once, then again to add a domain** — not per transcript. One job:
 
 It is **committed** — a property of the domain and its team, the same for whoever ingests.
 
-> **This skill had a second job until v2.2**: configuring where to-dos go (the backlog
-> workflow pointer). The workflow layer is deferred — the mesh holds context, and a queue is
-> the work itself. See
-> The design is retained privately.
+> **This skill had a second job once**: configuring where to-dos go. That was removed — the
+> mesh holds context, and a queue is the work itself.
 
 **There is no separate scaffolding command.** Adding a domain is **this same skill run again**;
 it is idempotent, so there is no separate "add" mode. Ask which domains to include — don't

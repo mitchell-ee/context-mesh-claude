@@ -44,7 +44,8 @@ LEGAL_EDGES = {
 # v2.2: `Todo`, `Task`, and `Workflow` were removed along with the edges `routed-to`,
 # `triggers`, and `creates`. The mesh holds context; a queue is the work itself. An
 # ingested action item is now reported as out of scope rather than typed and routed.
-# The full design is retained privately and may return as a future feature.
+# The mesh holds context, not work: a queue is the work itself, and every team tracks it
+# differently. Action items are noticed and reported, never filed.
 
 # Group A nodes must carry derives-from: provenance is mandatory (vocabulary.md).
 GROUP_A = {"Conversation", "Knowledge", "Requirement", "DomainFact", "OpenQuestion"}

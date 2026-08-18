@@ -13,7 +13,7 @@ an honest gap ingestion reports when it hits them.
 
 Workflow config was check #3 through v2.1 ("a workflow is declared, or every Todo is
 unroutable"). The whole workflow layer is deferred as of vocabulary v2.2 -- the mesh holds
-context, not work; the design is retained privately.
+context, not work -- a queue is the work itself.
 
 Usage:
     check_setup.py <hub-root-or-domain-dir>

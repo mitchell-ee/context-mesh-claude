@@ -186,9 +186,7 @@ the vocabulary:
 
 **Action items are out of scope — do not type them.** "Chase the DPA", "book the workshop",
 "file a ticket for X" are *the work*, not context about it. The mesh supports context; where
-work gets queued is the team's tracker's job, and every team's is different. There was a
-`Todo` type through v2.1; it is deferred
-(deferred; the design is retained privately).
+work gets queued is the team's tracker's job, and every team's is different.
 
 **Report them, don't drop them silently.** List the action items the transcript contained in
 the run summary, so the human can put them wherever they actually track work. Noticing one is
