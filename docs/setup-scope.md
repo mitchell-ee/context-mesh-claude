@@ -85,6 +85,19 @@ confidence.
 **Setup creates directories and the index file. It never creates a context file listed in that
 index.**
 
+> **Recommending a missing file is not generating one** (added 2026-08-18, with
+> `survey_repo.py`). Setup now reports *"this repo appears to have no architecture
+> documentation; the file that would cover it is `technical/architecture.md`"* — a sentence for
+> a human, not a file on disk. The rule is unchanged and is precisely why the recommendation
+> stops there: setup still has no source to author from, so it names the gap and leaves it.
+>
+> **Two guards keep the recommendation from becoming the failure mode it warns about.**
+> Recommend the **highest-level** artifact that covers the gap, never the eventual split — a
+> team told they need six architecture files creates six empty ones, and the empty indexed file
+> is the thing decision 4 forbids. And recommend **nothing** where the repo already covers the
+> area under its own naming: `docs/architecture/overview.md` closes that gap, and proposing the
+> manifest's path beside it would create a second home for one kind of context.
+
 - An empty `staging/candidates/` **is not a lie** — nothing routes *to* a directory, and its
   emptiness is accurate.
 - An index with zero entries **is not a lie** — it says "this domain has no context yet," which

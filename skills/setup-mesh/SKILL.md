@@ -53,12 +53,44 @@ Setup reads it to tell whether the mesh predates a convention change — see
 
 ## Survey first, then scaffold
 
-Two scripts, and the order matters — **survey is read-only; scaffold is the only writer.**
+Three scripts, and the order matters — **both surveys are read-only; scaffold is the only
+writer.**
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/skills/setup-mesh/scripts/survey_mesh.py" <hub-root>
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/setup-mesh/scripts/survey_repo.py" <repo-root>        # what context ALREADY exists
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/setup-mesh/scripts/survey_mesh.py" <hub-root>         # is the mesh set up correctly
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/setup-mesh/scripts/scaffold_domain.py" <hub-root> [<domain> ...]   # --dry-run to preview
 ```
+
+**`survey_repo.py` runs first, and answers the question that comes before the mesh exists.**
+`survey_mesh.py` reads the indexes and checks what they declare — useless before there is an
+index, which is exactly when setup runs. `survey_repo.py` instead walks the repo and reports:
+
+- **What is already there**, sorted into the three kinds of home — proposed **singletons**,
+  proposed **collections** (a folder of same-typed files), and **known structures** the plugin
+  already understands and that need no declaration.
+- **What appears to be missing**, as a short list of the *highest-level* file covering each
+  gap.
+
+**Everything it prints is a proposal, never a decision.** It cannot know what a file is about
+or when to load it, and those are the two things an index row needs. Walk the human through
+its output; don't apply it.
+
+**It recommends the highest-level artifact, and so should you.** A repo with no architecture
+documentation needs `technical/architecture.md` — *not* a six-file split into
+target-architecture, integration-map, API standards, and NFRs. Splitting is a later move, made
+when one real file grows too big to load for a single task. **Never open with the split
+version**: that is how a setup flow produces eighteen files nobody fills in.
+
+**Match what the repo already does, not the default manifest.** If they keep architecture at
+`docs/architecture/overview.md`, that gap is closed — the script suppresses the recommendation
+on a name match, and you should too. Proposing `technical/architecture.md` beside their
+existing file creates a second home for one kind of context, which is the thing the mesh
+exists to prevent. Their layout wins; the default manifest is a starting set, not a target.
+
+**It proposes; it never detects domains.** Grouping files by the directory they sit in is not
+a claim that any directory is a domain. A domain is a directory under `domains/`, and nothing
+else is one.
 
 The survey sorts the root and every domain into **READY** / **PARTIAL** / **BLOCKED**, and
 splits what's missing into the only two categories that matter:
@@ -141,16 +173,24 @@ Read it and check it against reality:
 
 ### If there is no `context-index.md`
 
-Walk the human through declaring one. **Find what's there, then ask about each file** — the
-index needs two things per entry that only a human knows:
+**Run `survey_repo.py` first**, then walk the human through what it found. The index needs two
+things per entry that only a human knows:
 
 - **What it's about** — one line.
 - **When to load it** — the progressive-disclosure condition. This is the part routing
   actually reads, and the part a wizard cannot guess.
 
-Look for the usual shapes (`technical/`, `product/`, `process/`, an existing OST) and propose
-what you find. **Propose, then confirm** — never assume `technical/system-behavior.md` is
-about what the default manifest says it's about. It's their domain.
+**Propose, then confirm** — never assume `technical/system-behavior.md` is about what the
+default manifest says it's about. It's their domain.
+
+Two judgments the script hands you rather than making:
+
+- **Is a proposed collection really one kind of context?** Several markdown files in one folder
+  is what a collection looks like on disk, and also what two unrelated documents look like. A
+  collection row claims they are the same kind, so ask.
+- **Is a proposed singleton context at all?** Working notes, scratch files, and meeting
+  detritus all end in `.md`. Anything not worth routing to should simply not be listed —
+  leaving it out is free, and listing it makes routing consider it forever.
 
 Write `context-index.md` following [templates/context-index.md](templates/context-index.md).
 
@@ -317,8 +357,14 @@ what a person reading the list will spot. Invite them to correct anything that l
 Then say plainly:
 
 - What was declared, and what was already there.
-- **Which context files are missing** relative to the default manifest — as a *list for the
-  humans*, not a to-do for the skill. Ingestion will report gaps honestly when it hits them.
+- **Which kinds of context appear to be missing** — from `survey_repo.py`, as a short list of
+  *the highest-level file that would cover each gap*, and as a *list for the humans*, not a
+  to-do for the skill. Ingestion will report gaps honestly when it hits them.
+  **Do not expand one recommendation into several.** If architecture is missing, say
+  `technical/architecture.md` — one file. Naming the eventual split invites a team to create
+  six empty files, and an empty indexed file is worse than an absent one.
+  **Say plainly that these are optional.** A repo without design principles is not a broken
+  repo; it is a repo without design principles.
 - **Which listed files are pending homes** — declared but not yet written. Say the paths out
   loud, and say that promotion will create them. **This is the only place a typo'd row gets
   looked at**, so it is a list to read, not a count to skim.
