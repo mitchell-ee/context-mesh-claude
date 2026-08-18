@@ -1,268 +1,177 @@
-# context-mesh — node & edge vocabulary (the schema)
+# The vocabulary: node and edge types
 
-Status: **LOCKED v2.5** (v1 2026-06-25; v1.1–v1.3 2026-07-16; v2.0 2026-07-21 — the
-single-Hub collapse; v2.1 2026-07-30; v2.2 2026-08-03 — workflow routing deferred,
-domains under `domains/`; v2.3 2026-08-04 — the mesh declares its own vocabulary
-version; v2.4 2026-08-06 — the PII policy is removed; **v2.5 2026-08-13 — `Domain` is
-optional and the Hub may be the code repo**, see Versioning).
-This is the controlled vocabulary — the type system of
-the knowledge graph. It is the schema the rest of the system references:
-[ingestion-pipeline.md](ingestion-pipeline.md) stages 2–3 classify into these types and
-[file-taxonomy.md](file-taxonomy.md) stores them. Changes here ripple everywhere —
-version-bump and update dependents.
+**What this is.** The list of things context-mesh can store, and the relationships it can record
+between them. Ingestion classifies every fact into one of these types before it can be routed
+anywhere.
 
-Locked per the starter vocabulary in
-[knowledge-graph-model.md](knowledge-graph-model.md). What changed from the starter list:
-- Node types are grouped by **lifecycle role** rather than listed flat — the three groups
-  have different edge rules.
-- Collapsed near-duplicate edges: `references`/`links-to` → **`references`**;
-  `applies-to`/`applies-across` → **`applies-to`** (cardinality is a property of the
-  target, not a separate edge).
-- Dropped `Artifact` as a node type — it was a catch-all spanning two groups; the concrete
-  discovery types replace it.
-- Added types surfaced downstream: node `OpenQuestion`; edges `routed-to`, `rendered-on`,
-  `contradicts`, `parent-of`.
+**What you get from reading it.** You will know what kinds of context the system recognizes, how
+they relate, and why a placement can be rejected as invalid.
 
-**v2.0 in one line:** all context lives in the AI Hub, partitioned into **domain** folders, so
-the node formerly called `Repo` is now `Domain`, `RepoFact` is now `DomainFact`, and the two
-cross-repo provenance edges (`mirrored-from`, `promoted-from`) are **removed** — there is no
-second repo to mirror from or promote across.
+**Who needs it.** Read the type tables if you are writing context by hand or wondering why
+something was typed a certain way. The skills read this file to classify and validate; the
+[legal-edge matrix](#legal-edge-matrix) is the part they enforce.
 
-**v2.1 in one line:** work that has no discovery lineage gets a type (`Task`), a `Workflow`
-now says **what it creates** as well as where it lives, and `Persona` admits it is keyed by
-`slug` rather than inert. All additive.
+---
 
-**v2.2 in one line:** the mesh holds context, not work — `Todo`, `Task`, and `Workflow` and
-their edges are **deferred out of the schema**, and domains now live under an
-explicit `domains/` folder. Breaking.
+## Why there is a vocabulary at all
+
+Without a fixed set of types, "route this fact to the right place" has no meaning — every
+conversation would invent its own categories and nothing could check the result.
+
+The vocabulary makes three things possible:
+
+1. **Routing.** A fact's type determines where it may live. A `DomainFact` goes in a domain's
+   technical context; an `OpenQuestion` cannot go into canonical context at all.
+2. **Validation.** Relationships are checked against a fixed matrix. An edge that is not legal
+   for a type is a validation error, caught before anything is written.
+3. **Traversal.** Discovery artifacts form a chain — a story belongs to a solution, which
+   belongs to an opportunity. Tooling can follow that chain and check it still resolves.
+
+The types are deliberately few. Every addition costs routing surface and needs a storage rule to
+match; a type the schema promises a home for, but storage never provides, is a hole every layer
+assumes the one below has filled.
 
 ---
 
 ## Node types
 
-Three groups by lifecycle role. The group determines which edges are legal (see matrix).
+Three groups by lifecycle role. **The group determines which edges are legal.**
 
-### Group A — Ingestion types (what a distilled chunk *is*)
-Transient by nature: produced by ingestion, live in staging, and either promote into a
-Group-B/C node or are dropped. Every Group-A node **must** carry `derives-from`.
+### Group A — Ingested knowledge
 
-| Type | Meaning | Promotes toward |
-|---|---|---|
-| `Conversation` | A distilled, PII-cleared interaction. The provenance root. Carries a **source reference** — see below. | (stays; never promoted) |
-| `Knowledge` | A durable fact about product/users/system. | canonical context file (Group C) |
-| `Requirement` | A new capability/constraint to build. | `Opportunity`/`Solution`/`Story` (Group B) |
-| `DomainFact` | A fact specific to one domain — its code, quirks, conventions. | that domain's canonical context (Group C) |
-| `OpenQuestion` | An undecided point needing a human decision. | resolves into one of the above |
-
-> **`Todo` was a Group-A type through v2.1** and is deferred as of v2.2 — the design is retained privately
-> and may return as a future feature. A conversation that produces
-> an action item still produces one; the mesh no longer types or routes it. Ingestion reports
-> it as out of scope rather than placing it.
-
-#### `Conversation` — required properties (added v1.1, 2026-07-16)
-
-The `Conversation` node is the provenance root: every ingested node hangs off it via
-`derives-from`. That makes it the **only** thing standing between a canonical fact and
-"where did this come from?" — so it must point at something a human can actually go and
-read. A provenance root that only summarizes is not provenance; it is the agent's word for it.
-
-| Property | Required | Meaning |
-|---|---|---|
-| `source_ref` | **yes** | A durable pointer to the transcript in **its own datastore** — Granola note ID, Slack permalink, Zoom recording ID, ticket URL. |
-| `source_kind` | **yes** | `referenced` \| `archived` \| `ephemeral` — see below. |
-| `source_archive` | when `archived` | Path to the archived copy this project holds. |
-| `content_hash` | **yes** | Hash of the raw input. Idempotency: re-ingesting the same conversation updates rather than duplicates. |
-| `source` | **yes** | Human-readable description ("checkout/payments sync, 2026-07-14"). |
-| `date`, `participants` | **yes** | Participants role-anonymized where required. |
-
-**`source_kind` — the three cases, and why the distinction is the whole point:**
-
-- **`referenced`** — *the normal case, and the one to design for.* The transcript already
-  lives in a system with its own retention, access control, and deletion path (Granola,
-  Slack, Zoom). context-mesh points at it and **takes no custody of PII**. Best of both:
-  a real audit trail, none of the retention burden.
-- **`archived`** — *the exception.* Someone hand-provided a transcript with no datastore
-  behind it. Reference-only would point at nothing, so the raw material would simply vanish.
-  It is archived (`source_archive`) **so it doesn't disappear** — see the retention note in
-  [ingestion-pipeline.md](ingestion-pipeline.md).
-- **`ephemeral`** — the source is gone and was never archived. **Legal but weak**: the facts
-  derived from it cannot be checked against anything. Flag it at the gate; never let it be
-  the silent default.
-
-**This does not reverse the no-raw-storage rule** ([ingestion-pipeline.md](ingestion-pipeline.md)).
-That rule stands for `referenced`, which is the case that should dominate: a transcript is
-the highest-PII artifact in the system, and the cheapest way not to leak it is not to hold
-it. `archived` is a deliberate, narrow exception for material that would otherwise be lost —
-custody is the exception, not the default.
-
-### Group B — Discovery & work artifacts (the board-object graph; multi-sibling, **ID'd**)
-Durable, multi-instance, the aiviz model. 4-digit **domain-prefixed** IDs
-(`payments:OPP-0042`). These form the outcome→story traceability chain via `parent-of`.
-
-| Type | ID | Parent (via `parent-of`) |
-|---|---|---|
-| `Outcome` | `OUTCOME-NNNN` | — (top of tree) |
-| `Opportunity` | `OPP-NNNN` | `Outcome` |
-| `Solution` | `SOL-NNNN` | `Opportunity` |
-| `Assumption` | `ASSUMPTION-NNNN` | `Solution` (optional — see below) |
-| `Story` | `STORY-NNNN` | `Solution` (optional), and `Epic` within an iteration |
-| `Epic` | `EPIC-NNNN` | (groups `Story`s) |
-| `Interview` | per-iteration | — (feeds synthesis) |
-
-ID numbering runs **`0000`–`9999`**. `0000` is legal and conventionally means "precedes
-everything" — a foundational artifact that came before the numbered work.
-
-#### A parent is optional everywhere (revised v2.2, 2026-08-03)
-
-**Requiring a parent was a mistake.** A parentless `Story` is legal, and so is a parentless
-`Assumption`. The chain is satisfied **as far up as it goes** — a team doing assumption
-mapping without a full opportunity-solution tree is a legal, expected configuration, and so is
-a team writing stories before any discovery has happened.
-
-The case that forced it: an assumption whose operative content is *which solutions not to
-design yet* ("defer the student home surface until students have been interviewed"). It
-constrains **whether to build anything**, so it cannot have a parent solution — the tree has
-zero solutions, by design. Requiring one gave it no legal home.
-
-**Prefer an explicit absence over a blank field:**
-
-```yaml
-parent: none
-parent-rationale: constrains whether to build at all; no solution exists to hang it from
-```
-
-A blank or missing `parent-*` key reads as *"not filled in yet."* `parent: none` plus a reason
-says *"this genuinely has no discovery lineage,"* which is a **finding**, not an omission.
-
-`check_references.py` only checks that a *named* parent resolves, so a parentless artifact was
-already legal to the walker — this revision fixes the documentation and the authoring
-convention, not the validator.
-
-> **`Task` was a Group-B type in v2.1** — work with no discovery lineage, `TASK-NNNN`, no
-> parent — and is deferred as of v2.2 alongside the rest of the workflow layer. The design is retained privately
-> and may return as a future feature. Note that with parents now
-> optional, the thing that distinguished a `Task` from a `Story` is parentless *by nature*
-> versus *yet*, which the taxonomy cannot tell from the file; any restoration must
-> re-establish why the type earns its place.
-
-### Group C — Canonical context & structural (singletons, **path-referenced**)
-The slow foundation. One authored instance each; referenced by path.
+What a conversation produces. Every one carries `derives-from` pointing at its `Conversation`.
 
 | Type | Meaning |
 |---|---|
-| `ContextFile` | A canonical context file (business-context, coding-standards, etc.). |
-| `Persona` | A customer/stakeholder persona. **Keyed by `slug`** — see below. |
+| `Conversation` | The provenance root — a meeting, a session. Every ingested fact hangs off one. |
+| `Knowledge` | A durable, cross-cutting fact. |
+| `DomainFact` | A fact about one domain — how a service behaves, a constraint it has. |
+| `Requirement` | A capability or constraint the product must satisfy. |
+| `OpenQuestion` | Something undecided. **Cannot promote** — it must be resolved into another type first. |
+
+### Group B — Discovery artifacts
+
+Product-discovery work. **Many siblings, each with an ID**, forming a traceable chain. IDs are
+4-digit and domain-prefixed (`payments:OPP-0042`) so they are unique across the mesh.
+
+| Type | ID prefix | Meaning |
+|---|---|---|
+| `Outcome` | `OUTCOME-` | A business result being pursued. |
+| `Opportunity` | `OPP-` | A user need or problem that could be addressed. |
+| `Solution` | `SOL-` | A proposed way to address an opportunity. |
+| `Assumption` | `ASSUMPTION-` | Something believed but not proven, usually attached to a solution. |
+| `Story` | `STORY-` | A unit of delivery. |
+| `Epic` | `EPIC-` | A grouping of stories. |
+| `Interview` | — | A research conversation. |
+
+**Parents are optional.** An artifact may exist before anyone decides where it belongs in the
+chain — that is normal in discovery, not an error.
+
+### Group C — Canonical context and structure
+
+The slow foundation. One authored instance each, referenced by path.
+
+| Type | Meaning |
+|---|---|
+| `ContextFile` | A canonical context file — business context, coding standards, and so on. |
+| `Persona` | A customer or stakeholder persona. Keyed by `slug`. |
 | `Architecture` | Cross-cutting technical architecture. |
-| `Domain` | A namespace within the Hub — one folder under `domains/`, holding all context about one thing. See below. |
-| `Board` | An external visual surface (Miro / Claude Design) — view only, never canonical. |
+| `Domain` | A namespace within the Hub — one folder under `domains/`. |
+| `Board` | An external visual surface (Miro, Claude Design) — a view, never canonical. |
 
-> **`Workflow` was a Group-C type through v2.1** — a triggerable process, usually a pointer to
-> an external system — and is deferred as of v2.2. The design is retained privately
-> and may return as a future feature.
+---
 
-#### `Domain` — the namespace node (replaces `Repo`, v2.0, 2026-07-21)
+## Three types worth explaining
 
-All context lives in the **AI Hub**, the one repo. A `Domain` is a **folder under `domains/`**
-holding all context about one thing, and it is what `applies-to` targets — the answer to "what
-is this context *about*."
+### `Domain` — a namespace, not a repository
 
-| Property | Required | Meaning |
-|---|---|---|
-| `name` | **yes** | The folder name and the ID prefix (`payments` → `payments:OPP-0042`). |
-| `about` | **yes** | What this domain covers, in a line. Declared in the index. |
-
-**A domain lives at `domains/<name>/` and nowhere else (v2.2, 2026-08-03).** Through v2.1
-domains sat at the Hub root beside the cross-cutting folders, and tooling had to *guess* which
-top-level directories were domains — `survey_mesh.py` did it by looking for a `product/`,
-`technical/`, or `process/` subdirectory. That heuristic misfired in the first third-party run:
-a `docs/product/` folder holding market research was reported as a domain, while the real
-domain tree, having no such subdirectory, was missed. **The heuristic found the wrong one of
-the two.**
-
-An explicit container removes the guess. Anything under `domains/` is a domain; nothing else
-is one, whatever it is called. There is no ignore list to maintain and no detection rule to
-tune, because there is no detection.
-
-**A `Domain` is not necessarily a code repository.** It may map 1:1 to one repo, span several
-(a `payments` domain covering payments-svc, ledger-svc, refunds-svc), or be finer than one.
-**Which domains exist is *manifest*** — per-implementation config, decided per engagement, the
-same treatment the context-file lists get ([file-taxonomy.md](file-taxonomy.md)). **That
-domains, where they exist, are folders and own their context exclusively is *framework*** and
-does not vary.
-
-**Zero is a legal answer.** A mesh may have no domains at all — all of its context cross-cutting
-at the Hub root — and that is a complete mesh, not a half-built one. `Domain` is an optional
-layer of the vocabulary, not a required one: a mesh that never instantiates the type is using
-the schema correctly. Nothing may report an absent `domains/` as a gap.
-
-**Nor is the converse structural: the Hub is not necessarily *not* a code repository.** Where a
-product spans many repos, the Hub is usually its own; in a **monorepo the Hub root is the repo
-root**, with `context-index.md` beside the build manifest and Hub-relative paths identical to
-repo-relative ones. The two variables — where the Hub sits, and whether domains exist — are
-**independent**, and neither is inferred from the other or from a directory's contents.
-
-The rename from `Repo` is not cosmetic. `Repo` asserted a physical fact (this context sits in
-that git repository); `Domain` asserts a logical one (this context is *about* that thing), which
-is what every edge actually meant. Where the Hub is a separate repo, the code repos hold no
-context and are unaware of the mesh — a consequence of the invariant (**one home per fact, never
-mirrored**) under that deployment, not a rule of the schema.
-
-**Ownership is declared, not structural.** When context lived in many repos, "authored in
-exactly one place" was enforced by repo boundaries. In one Hub it is true by default, so
-*which team owns a domain* is now a declaration (`owned-by`, CODEOWNERS) rather than something
-the filesystem enforces.
-
-#### `Persona` — keyed by `slug`, one file each (added v2.1, 2026-07-30)
-
-`Persona` is the one Group-C type that is **not inert**. Other singletons are referenced by
-path and nothing validates their name; a persona is referenced **by `slug`** from every
-`Story` that names an actor, so the slug is load-bearing and a missing persona is a real
-dangling reference.
+A `Domain` is a folder under `domains/` holding all context about one thing. It answers "what is
+this context *about*."
 
 | Property | Required | Meaning |
 |---|---|---|
-| `slug` | **yes** | The key stories reference (`mentor`, `courier`). Unique within the mesh. |
-| `name` | **yes** | Display name. |
-| `emoji` | no | A single emoji for board rendering. Absent → renders without a prefix. |
+| `name` | yes | The folder name, and the ID prefix (`payments` → `payments:OPP-0042`). |
+| `about` | yes | What this domain covers, in one line. Declared in the index. |
 
-**One file per persona**, at `product/personas/{slug}.md`. There is **no legend file.** A
-slug→emoji table living apart from the personas is a second source of truth: it goes stale,
-and detecting the staleness needs machinery that exists only because the table exists. With
-`emoji` on the persona, the failure mode becomes "persona file missing" — a real, actionable
-error a validator can check — instead of "legend is out of date."
+**A domain lives at `domains/<name>/` and nowhere else.** The path is the declaration, so nothing
+has to detect domain-ness. A folder called `product/` at the root is the cross-cutting product
+tree; the same name under `domains/payments/` belongs to that domain.
 
-Rendering surfaces (a Miro story-map legend, say) **derive** the mapping by reading the
-persona files. Derived views are fine; a stored second copy is not.
+**A domain need not map to a code repository.** It may cover one repo, several, or part of one.
+
+**Zero domains is legal and complete.** A mesh whose context is entirely cross-cutting never
+instantiates this type, and that is correct use of the schema. Nothing may report an absent
+`domains/` as a gap.
+
+**Ownership is declared, not structural** — `owned-by`, or CODEOWNERS. The filesystem does not
+enforce it.
+
+### `Persona` — keyed by `slug`
+
+| Property | Required | Meaning |
+|---|---|---|
+| `slug` | yes | The key stories reference (`first-time-buyer`). Unique within the mesh. |
+| `name` | yes | Display name. |
+| `emoji` | no | A single emoji for board rendering. |
+
+One file per persona at `product/personas/{slug}.md`. **The slug is load-bearing**: a `Story`
+names its actor by slug, so a missing persona is a genuine dangling reference and renaming a
+persona file breaks something.
+
+**There is no legend file.** A slug→emoji table kept apart from the personas would be a second
+source of truth that goes stale. With `emoji` on the persona itself, the only failure mode is
+"persona file missing" — which a validator can actually check. Rendering surfaces derive the
+mapping by reading the persona files.
+
+### `Board` — the one node that is not a file
+
+Every other node in the mesh is a file, and every other edge points at one. A `Board` lives in
+Miro or Claude Design and is addressed by board ID.
+
+Board sync is **optional** — a team need not use it — but the vocabulary defines the slot so
+teams who do have a defined home.
+
+- **A sidecar is an attachment to its parent node, never a standalone node.** Co-located with
+  the artifact it syncs, suffixed `.board.json`.
+- **Sidecars are never the source of truth.** They hold sync state — board ID, geometry,
+  last-synced sha. Dropping every sidecar loses no context, only sync convenience.
+- **The edge is `rendered-on`**, artifact → board.
+
+**This creates one validator exception**, enforced by `check_references.py` as a positive rule in
+both directions: a `rendered-on` target **must** be a board reference and **must not** be a path
+(a file target would make the file the visual surface, inverting "a board is a view"), and **no
+other edge type may target a board.**
+
+Whether the board actually exists is deliberately unchecked — that is the vendor's API, and
+asking would couple the mesh to a vendor.
+
+The board *sync* itself — reading a board, writing changes back — is a separate vendor
+integration, outside context-mesh. The mesh defines the slot; a sync tool fills it.
 
 ---
 
 ## Edge types
 
-All edges are **directed and named**. `source —edge→ target`.
+All edges are **directed and named**: `source —edge→ target`.
 
 | Edge | Direction | Meaning |
 |---|---|---|
 | `derives-from` | Group-A node → `Conversation` | Provenance. Mandatory on every ingested node. |
-| `references` | any → `Domain` / Group-B node | A soft mention/link (collapses old `references`+`links-to`). |
-| `applies-to` | `Persona`/`Architecture`/`Knowledge`/`DomainFact` → `Domain` | This context governs that domain. Cardinality (one vs. many domains) is a property of the edge set, not a separate edge (old `applies-across` removed). |
-| `parent-of` | Group-B → Group-B | The traceability chain (Outcome→Opp→Sol→Story; Epic→Story). Inverse of the aiviz `Parent X` frontmatter. **Optional** — see Group B. |
-| `contradicts` | any → any | This node conflicts with that one. Flagged for human, never auto-resolved. |
-| `rendered-on` | Group-B node → `Board` | An optional visual view. Dropping it loses no context. |
-| `owned-by` | any → team | The single authoring owner. Declared, not inferred from location. |
-| `loaded-by` | `ContextFile` → index/loader | Progressive-disclosure: when this file loads. |
-
-> **Three edges were deferred in v2.2:** `triggers` (`Requirement` → `Workflow`), `routed-to`
-> (`Todo`/`Task` → `Workflow`), and `creates` (`Requirement`/`Workflow` →
-> `Story`/`Epic`/`Task`). All three existed only to move an action item into a queue. The design is retained privately
-> and may return as a future feature.
+| `references` | any → `Domain` / Group-B node | A soft mention or link. |
+| `applies-to` | `Persona`/`Architecture`/`Knowledge`/`DomainFact` → `Domain` | This context governs that domain. |
+| `parent-of` | Group-B → Group-B | The traceability chain (Outcome→Opportunity→Solution→Story; Epic→Story). Optional. |
+| `contradicts` | any → any | This node conflicts with that one. **Flagged for a human, never auto-resolved.** |
+| `rendered-on` | Group-B node → `Board` | An optional visual view. |
+| `owned-by` | any → team | The authoring owner. Declared, not inferred from location. |
+| `loaded-by` | `ContextFile` → index | When this file should load. |
 
 ---
 
-## Legal-edge matrix (the routing logic)
+## Legal-edge matrix
 
-For each **source** node type, the edges it may legally originate. This *is* the routing
-logic the ingestion agent enforces at propose-time (stage 3) — an edge not in this matrix
-is a validation error.
+**This is the routing logic.** For each source type, the edges it may legally originate. An edge
+not in this matrix is a validation error, caught by `validate_placements.py` before anything is
+written.
 
 | Source type | Legal outgoing edges |
 |---|---|
@@ -282,403 +191,44 @@ is a validation error.
 | `Persona` | `applies-to`, `references` |
 | `Architecture` | `applies-to`, `references` |
 | `Domain` | `owned-by` |
-| `Board` | (none — terminal; only a `rendered-on` target) |
+| `Board` | none — terminal; only ever a `rendered-on` target |
 
-Reading the matrix as routing: a `Knowledge` chunk `applies-to` a domain and may `contradict`
-existing context (flagging a conflict). A `Requirement` records a capability or constraint and
-may contradict what is already documented, but the mesh does not route it into a process —
-that is the work, and the work is out of scope (v2.2). This is the type system "doing real work
-as a schema," as knowledge-graph-model.md put it.
+Read it as routing: a `Knowledge` chunk `applies-to` a domain and may `contradict` existing
+context, which flags a conflict for a human. An `OpenQuestion` can only point back at where it
+came from — it has nowhere to go until someone decides something.
 
 ---
 
-## Tags (not edges)
+## Tags
 
-Two boolean/enum tags ride on nodes; they are not relationships:
-- `decided` | `undecided` — drives where in staging a chunk sits (ingestion stage 2).
-- `state: staging | canonical` — promotion lifecycle position.
+Two tags ride on nodes. They are not relationships:
 
-> **`state: resolved` was a third value through v2.1** — a candidate promoted *out of* the
-> mesh, into the external system its `Workflow` named. It existed only for workflow handover
-> and is deferred with it (v2.2). The design is retained privately
-> and may return as a future feature.
-
-### There is now exactly one "promotion" (v2.0)
-
-Through v1.3 two unrelated things were both called promotion, and the vocabulary had to warn
-against conflating them: staging → canonical (marked by `state:`) and leaf → Hub (marked by
-`promoted-from`). **The second no longer exists.** With all context in one Hub there is no
-access boundary to cross and no second repo to snapshot into, so `promoted-from` is removed
-and the name collision is gone with it.
-
-**"Promotion" now unambiguously means staging → canonical**: a human accepting an ingested
-candidate into a context file, recorded by the `state:` tag and the candidate's own
-frontmatter.
+- **`decided` | `undecided`** — where in staging a chunk sits.
+- **`state: staging | canonical`** — promotion lifecycle position. A promoted candidate stays in
+  staging marked `canonical`, as the audit trail.
 
 ---
 
-## Versioning
+## What the mesh does not type
 
-This vocabulary is **v2.5**. Adding a type is a minor bump; changing an edge's legality or
-removing a type is a major bump and requires updating every dependent doc. **Adding a
-required property to an existing type is a minor bump** — it constrains what a valid
-instance looks like without changing what the graph traverses. (This case was unspecified
-until v1.1 needed it.) The lock exists so ingestion and storage agree on one schema.
+**Work items.** No `Todo`, `Task`, or `Workflow`. A queue is the work itself, not context about
+it, and every team tracks work differently. Ingestion notices action items and reports them; it
+does not file them.
 
-### v2.5 (2026-08-13) — `Domain` is optional; the Hub may be the code repo. **Additive.**
+The full design for work routing is preserved in the source repository, complete enough to
+rebuild from if it is ever wanted.
 
-**No type or edge changes.** Nothing in the schema is added, removed, or re-legalized. This
-entry records two things the vocabulary always permitted and its prose denied, both of which
-had already produced a bug.
+---
 
-**1. A mesh may have zero domains.** All context cross-cutting at the Hub root, no `domains/`
-directory. `Domain` is an **optional layer** — a mesh that never instantiates the type is using
-the schema correctly, and nothing may report its absence as a gap. `survey_mesh.py` did: it
-printed *"NO DOMAINS YET"* with instructions for adding one, and closed with *"the Hub ROOT is
-ready — **but** NO DOMAINS EXIST."* Both told a complete mesh it was unfinished.
+## Changing the vocabulary
 
-**2. The Hub may be the code repo.** Where a product spans many repos the Hub is usually its
-own, and those code repos hold no context. **In a monorepo the Hub root is the repo root**:
-`context-index.md` beside the build manifest, Hub-relative paths identical to repo-relative
-ones. The structure, the tooling, and every path rule are unchanged.
+Adding a type is a minor change. Changing an edge's legality or removing a type is a breaking
+change and requires updating every dependent doc and the skills that enforce the matrix.
 
-**The two are independent** — a multi-repo product will probably carve domains, a monorepo
-probably won't, and either may do the opposite. Nothing infers one from the other, or either
-from what a directory contains. There is no monorepo *mode* and no shape to detect.
+**Every type needs a storage rule.** A type the schema recognizes but the taxonomy has no home
+for is a gap every layer assumes another layer has filled. Add the type and its home together,
+or not at all.
 
-**Why the prose said otherwise.** *"Code repos hold no context and are unaware of the mesh"*
-described the seeding client's ~100-repo topology and got written as though it were framework.
-It is what the real invariant — **one home per fact, authored once, never mirrored** — looks
-like when the Hub is a separate repo. The pre-collapse design had it right — mono-repo and
-multi-repo were held to be *the same model, differing by exactly one path segment* — and
-resolving that "into the only case" meant the monorepo branch is the **only** branch. It was
-then read as its opposite for three weeks.
-
-| Change | Detail |
-|---|---|
-| Clarify | `Domain` is optional; zero domains is a complete mesh, never a gap |
-| Clarify | the Hub may be its own repo **or** the code repo; in a monorepo, Hub root = repo root |
-| Clarify | the two are independent; neither is inferred from the other |
-| Fix | `survey_mesh.py` no longer reports zero domains as unfinished |
-
-**Found while fixing it:** the survey's scaffold-stub check was **fail-closed** — it decided an
-index was an unfilled stub from a `SCAFFOLD:` marker that lives inside the template's
-*permanent* guidance comments, so a fully populated index reported as empty forever while
-`check_setup.py` called the same directory READY. Not one of the eleven fail-opens; the inverse
-shape, which is why hunting for validators-that-pass-while-checking-nothing never surfaced it.
-
-### v2.4 (2026-08-06) — the PII policy is removed. **Breaking.**
-
-**`PII policy: strip | enrich` is gone from the Hub root index**, and with it stage 1b of
-ingestion. **Ingestion does nothing to a transcript before extracting from it** — no
-redaction, no anonymization, no substitution of speaker names. What arrives is what is read,
-and for `archived`, what is written.
-
-**Why.** The rule it replaced arrived on 2026-06-25 as an unexamined GDPR default and was
-never justified against the actual material. Transcripts come from meetings whose participants
-are internal or have consented to recording, so the liability framing did not hold — and
-`strip` was the *default*, so the safe-looking option was also the lossy one.
-
-**The deeper correction is about what kind of thing this is.** Normalizing a transcript is a
-**quality** concern, not a privacy posture. The useful version of it *resolves* a speaker who
-appears as "Sarah", "Sarah K." and "SK" to one person; `strip` merely replaced all three with
-a label, discarding the signal instead of fixing it. Framed that way the axis is **how much
-correction happens before extraction** — none, destructive, or corrective — and only the third
-is worth building. It belongs in a **pre-pass** (the slot `structure-transcript` occupies),
-never buried in ingestion.
-
-| Change | Detail |
-|---|---|
-| Remove | `PII policy:` line from the Hub root index's Identity block |
-| Remove | `ingest-conversation` stage 1b (sanitize) |
-| Remove | the `## PII policy` section from `prompts/structure-transcript.md` |
-| Change | `archived` now stores the transcript **as received**, not a sanitized copy |
-
-**Retention moved to where it belongs.** Through v2.3 the pipeline decided what a team's
-transcripts could contain. Now the team decides whether to keep them at all: `.gitignore` is
-the lever, applied to a repo they own. A pipeline that quietly rewrites someone's content is a
-worse answer than one that stores it honestly and lets them choose.
-
-**No `Conversation` property changed**, so nothing already ingested is invalid — this is
-breaking because a *behaviour* and a declared setting were removed, not because stored data
-became wrong. A mesh whose root index still carries a `PII policy:` line is migrated by
-removing that line; the migration is index-only.
-
-### v2.3 (2026-08-04) — the mesh declares its own vocabulary version. **Additive.**
-
-**The Hub root's `context-index.md` carries a `**Mesh vocabulary:**` line** in its Identity
-block, beside `**PII policy:**`. It names the schema version the mesh's content is written
-in. Additive: a mesh without the line is valid, and reads as *unknown*, never as *current*.
-
-**It is a prompt trigger, not a selector.** Setup reads it to decide whether to *say*
-something; every migration decides whether it applies by inspecting content shape. If the
-marker selected migrations, an unmarked mesh — every mesh built before this version — would
-silently skip all of them. Migrations run in full, always, and guard themselves.
-
-**Root only.** One marker per mesh: a domain-level copy could disagree with the root's, and
-there is nothing a per-domain vocabulary version would mean.
-
-The mesh does not migrate itself. `skills/setup-mesh/migrations/` holds one guarded,
-idempotent file per convention change, under a rule stricter than the schema requires:
-
-> **A migration only ever edits an index, or reports. It never moves, deletes, or rewrites
-> content in the mesh.**
-
-The plugin only ever *adds*. Mesh content is the team's, often the only copy, and worth more
-than the tooling — so a migration that would relocate a directory it might have
-misidentified **reports instead**, and the human moves it.
-
-**Two v2.2 changes need no migration**, recorded so nobody writes a no-op later: parents
-becoming optional and IDs widening to `0000`–`9999` are both pure loosenings. Existing
-content stays valid. A convention change needs a migration only when existing content becomes
-**wrong**, not when it becomes non-mandatory.
-
-### v2.2 (2026-08-03) — workflow routing deferred; domains under `domains/`. **Breaking.**
-
-Two unrelated changes, bumped together because both are breaking and both landed in one pass.
-
-#### 1. The mesh holds context, not work
-
-**`Todo`, `Task`, and `Workflow` are removed from the schema**, along with the edges
-`routed-to`, `triggers`, and `creates`, and the `state: resolved` tag value. The complete
-design — property tables, storage rule, template, findings — is retained privately as a deferred feature spec.
-
-| Change | Detail |
-|---|---|
-| Remove type | `Todo` (Group A) |
-| Remove type | `Task` (Group B) — added v2.1, removed four days later |
-| Remove type | `Workflow` (Group C) |
-| Remove edges | `routed-to`, `triggers`, `creates` |
-| Remove tag value | `state: resolved` |
-| Narrow | `Requirement` keeps `derives-from`, `references`, `contradicts`; loses `triggers`, `creates` |
-
-**Why.** The mesh is about **supporting context, not about the work**. A queue is not context;
-it is the work itself. `Workflow` entered the vocabulary as a *pointer* to respect that line,
-but it entered at all because it was a defined part of the `ee-pm` plugin — **and ee-pm
-combines context and workflow natively.** The mesh inherited a distinction that was never its
-own.
-
-Three things followed: everyone handles work items differently (Jira, Linear, GitHub, a
-markdown file), so modelling "where work goes" means modelling all of them for no contextual
-return; the *nature* of the content differs (durable and decided vs. transient and in-flight),
-so one schema holding both keeps bending toward whichever it was last asked about; and
-`creates:` described **what the receiving system does with an item**, which is that system's
-business, not the mesh's.
-
-**Why removal rather than deprecation.** Same reasoning as v2.0's removal of `mirrored-from`:
-a deprecated-but-legal type is a fail-open trap. A validator would accept it and check nothing,
-an author would find it documented and use it, and neither would be wrong to. Moving it to a
-proposal makes the deferral unambiguous while keeping it recoverable.
-
-**Two Minotaur findings dissolve rather than get fixed** — finding 3 (a single-domain Hub had
-nowhere legal for a `Todo` to route) and finding 5 (`survey_mesh.py` promised a
-`process/workflows/` directory the scaffold correctly refused to create). Both are recorded in
-the proposal, since a restoration would reintroduce them.
-
-#### 2. Domains live under `domains/`
-
-| Change | From | To |
-|---|---|---|
-| Domain location | `<hub-root>/<name>/` | **`<hub-root>/domains/<name>/`** |
-| Domain detection | heuristic (a dir containing `product/`, `technical/`, or `process/`) | **none — the path is the declaration** |
-
-**Why.** Domains sat beside the cross-cutting folders at the Hub root, so tooling had to guess
-which top-level directories were domains. In the first third-party run, `looks_like_domain()`
-reported a `docs/product/` folder holding market research as a BLOCKED domain, while the actual
-domain tree — having no `product/` subdirectory of its own — was **not detected at all**. The
-heuristic found the wrong one of the two, exited 1, and printed scaffold instructions that
-would have committed the repo to a structure it never wanted.
-
-An explicit container deletes the problem class rather than tuning it: anything under
-`domains/` is a domain, nothing else is, and there is no ignore mechanism to maintain because
-there is nothing to ignore.
-
-**No compatibility shim.** A tolerated legacy location would keep the ambiguous detection alive
-in the code, which is the bug. Existing meshes move their domain folders under `domains/`.
-
-#### 3. Parents are optional (documentation fix, not a schema change)
-
-`parent-of` was never enforced as required by the walker — `check_references.py` only checks
-that a *named* parent resolves — but [file-taxonomy.md](file-taxonomy.md) marked `Parent
-Solution` **required** on assumptions, and ee-pm enforced it. **Requiring a parent was a
-mistake.** A parentless `Story` and a parentless `Assumption` are both legal; the chain is
-satisfied as far up as it goes. Prefer explicit `parent: none` + a rationale over a blank
-field. See Group B.
-
-**Also settled:** ID numbering runs `0000`–`9999`. `0000` is legal and conventionally means
-"precedes everything."
-
-**Dependents updated:** [file-taxonomy.md](file-taxonomy.md),
-[ingestion-pipeline.md](ingestion-pipeline.md), [setup-scope.md](setup-scope.md),
-[build-scope.md](build-scope.md), [knowledge-graph-model.md](knowledge-graph-model.md),
-`skills/setup-mesh/` (`check_setup.py`, `survey_mesh.py`, `scaffold_domain.py`,
-`check_references.py`, `SKILL.md`, templates), `skills/ingest-conversation/`
-(`validate_placements.py`, `SKILL.md`, `templates/candidate.md`),
-`skills/promote-candidate/` (`classify_candidates.py`, `SKILL.md`), `test-mesh/`, `README.md`,
-`CLAUDE.md`, `prompts/structure-transcript.md`.
-
-### v2.1 (2026-07-30) — `Task`, keyed `Persona`, `Workflow` creation targets
-
-> **Superseded in part by v2.2.** `Task`, `Workflow.creates`, and `Workflow.via` were all
-> deferred out of the schema on 2026-08-03 — the design is retained privately
-> and may return as a future feature. The `Persona` and
-> `Assumption` changes below remain live (the assumption's parent is now optional, per v2.2).
-> Kept as the record of why they were added.
-
-Prompted by reconciling this schema with the `ee-pm` plugin, which stores the same discovery
-artifacts and disagreed with it in four places. Two of those disagreements were ee-pm trailing
-an older convention and are fixed there; two were **gaps here**, fixed in this bump.
-
-**Schema changes (all additive — no existing type, edge, or property changes meaning):**
-
-| Change | Detail |
-|---|---|
-| Add type | `Task` — `TASK-NNNN`, Group B, **no parent** |
-| Add edges | `Task`: `references`, `routed-to`, `rendered-on` |
-| Extend | `creates` may target `Task`; `routed-to` may originate from `Task` |
-| Add properties | `Workflow.creates`, `Workflow.via` (both optional) |
-| Promote to required | `Workflow.system`, `Workflow.external_ref` (were "when external") |
-| Widen | `Workflow.system` accepts `repo`; `external_ref` accepts a repo-relative path |
-| Add properties | `Persona.slug` (**required**), `Persona.name` (**required**), `Persona.emoji` (optional) |
-| Clarify | `Assumption`'s required parent is a `Solution`, **not** a full OST |
-
-**Why `Task`.** `Story` was the only work artifact in the schema, so all non-dev work — run
-the workshop, chase the DPA — had nowhere to go, and a `Todo` routed to a backlog landed as an
-untyped line. Since `Story` is already a tracked Group-B type, tracking one kind of work and
-not the other was arbitrary. `Task` is defined by the **absence** of a discovery parent.
-
-**Why `Workflow.creates`.** `Workflow` said where work goes but not what it becomes there, so
-one queue could not be distinguished from another. With `creates`, a `Todo` routed to a
-`creates: Story` workflow is destined for a real story — ID, template, parent, backlog entry —
-and a `creates: Task` workflow takes the rest. Several workflows per mesh is the intended
-shape.
-
-**Why the anti-shadow rule was restated.** It was written as "no mesh-native lists" and
-implemented as a **checkbox-character check**. That test was wrong in both directions: it
-blocked a repo-native backlog that is legitimately the single record of work, and it would
-pass a genuine shadow copy written without checkboxes. The hazard is a **second source of
-truth**, so the test is now "does this declare an owning system, and does its `external_ref`
-resolve?" This is the seventh instance of the fail-open validator pattern this project keeps
-finding — it reported a pass by checking the wrong thing.
-
-**Why `Persona` gains required properties.** It was documented as an inert path-referenced
-singleton, but `Story` references personas **by slug**, so the slug was already load-bearing
-and a missing persona was already a dangling reference the schema did not describe. `emoji`
-moves onto the persona so no separate slug→emoji legend has to be kept in sync.
-
-**Not breaking, with one caveat.** Every change is additive. The caveat: `Workflow.system` and
-`external_ref` become required, so a pre-v2.1 `Workflow` with neither is now invalid — which
-is exactly the shadow-tracker case the rule targets, and the intended effect.
-
-**Dependents to update:** [file-taxonomy.md](file-taxonomy.md) (assumption + persona +
-`Task` storage, the setup-boundary invariant), [setup-scope.md](setup-scope.md),
-`skills/setup-mesh/` (`check_setup.py`, `survey_mesh.py`, `check_references.py`, `SKILL.md`),
-`skills/ingest-conversation/` (stage-3 routing on `creates`), `test-mesh/`, `CLAUDE.md`.
-
-### v2.0 (2026-07-21) — the single-Hub collapse. **Breaking.**
-
-The decision: **the AI Hub is the only place context lives.** Domain-specific context sits in a
-domain folder *inside the Hub*, not in the code repo it describes. Code repos hold no context
-and are unaware of the mesh. All Hub content — domain-specific included — is readable by
-everyone.
-
-**Schema changes (breaking):**
-
-| Change | From | To |
-|---|---|---|
-| Rename | `Repo` | `Domain` |
-| Rename | `RepoFact` | `DomainFact` |
-| Remove | `mirrored-from` | — |
-| Remove | `promoted-from` | — |
-| Retarget | `applies-to` → `Repo` | `applies-to` → `Domain` |
-| Retarget | `owned-by` → `Repo`/team | `owned-by` → team |
-| IDs | repo-prefixed `payments-svc:OPP-0042` | domain-prefixed `payments:OPP-0042` |
-
-**Everything else is deliberately untouched** — the three node groups, the discovery-artifact
-shape and parent chain, `derives-from` provenance, the `Conversation` source rules, the
-`state` tag, and every other row of the legal-edge matrix. This is a **narrow collapse, not a
-redesign**: the type system was already correct about *what* it modelled, and wrong only in
-asserting *where* things physically lived.
-
-**Why the edges go rather than being deprecated.** `mirrored-from` and `promoted-from` both
-encode "this node is a generated read-only copy of a node in another repo." With one repo,
-they cannot have a valid instance — a deprecated-but-legal edge that can never be satisfied is
-a fail-open trap of exactly the kind this project keeps finding: a validator would accept it
-and check nothing.
-
-**What this dissolves entirely:** the CI mirror, leaf→Hub promotion, the partitioned/uniform
-access model, the promotion allow-list, and the whole class of bugs where **a repo-relative
-reference stops meaning what it meant once it leaves its repo** (four documented instances,
-one of them cross-domain data corruption). `technical/system-behavior.md` is unambiguous
-because there is only one.
-
-**Dependents updated:** [file-taxonomy.md](file-taxonomy.md),
-[promotion-boundary.md](promotion-boundary.md), [setup-scope.md](setup-scope.md),
-[ingestion-pipeline.md](ingestion-pipeline.md), `hub-leaf-meshing.md` (retired),
-`skills/ingest-conversation/`, `skills/promote-candidate/`, `skills/setup-mesh/`,
-`skills/promote-to-hub/` (deleted), `test-mesh/`, `CLAUDE.md`.
-
-### v1.3 (2026-07-16) — `state: resolved`
-
-> **Superseded by v2.2** — `state: resolved` is deferred with the workflow layer it served.
-> The design is retained privately.
-
-The `state` tag gains a third value for a candidate promoted **out of** the mesh rather than
-into it: a `Todo` handed over to the Jira/Linear project its `Workflow` names. Minor bump — a
-tag value, no type or edge touched.
-
-**Why:** such a candidate is in neither existing state. Never `canonical` (no file exists for
-it — the backlog lives in Jira), no longer `staging` (the decision is made). It is kept rather
-than deleted so the `derives-from` chain survives: the ticket is the work, the candidate is
-the record of where the work came from, and a Jira ticket cannot hold that.
-
-Also documented here: **`promoted-from` is not the staging→canonical marker.** It is Hub↔leaf
-snapshot provenance. Two unrelated things are called "promotion" in this system and the
-vocabulary now says so explicitly.
-
-**Dependents updated:** `skills/promote-candidate/`.
-
-### v1.2 (2026-07-16) — `Workflow` properties and storage
-
-> **Superseded by v2.2** — the whole `Workflow` layer is deferred. See
-> The retained private design carries this storage rule and the finding that produced it.
-
-`Workflow` gains `name` / `system` / `external_ref` and, in
-[file-taxonomy.md](file-taxonomy.md), a physical home at `process/workflows/`. Minor bump: no
-type added or removed, **no edge legality changed** — `routed-to` and `triggers` already
-pointed at `Workflow`; they just pointed at something that could not exist.
-
-**Why:** `Workflow` was a node type with no storage rule. Ingestion run 1 produced two `Todo`
-chunks and could place neither, at *high* confidence — the agent knew what it wanted and the
-taxonomy had nowhere to put it. `Requirement → triggers → Workflow` had the same hole and had
-simply not been hit. The fix is storage plus the rule that a `Workflow` is normally a
-**pointer to the external system that really runs the process**, so the mesh never becomes a
-shadow issue-tracker.
-
-**Dependents updated:** [file-taxonomy.md](file-taxonomy.md) (the storage rule),
-`skills/ingest-conversation/SKILL.md` (stage 3 routing), `test-mesh/` (a real backlog
-workflow to route to).
-
-### v1.1 (2026-07-16) — `Conversation` source references
-
-`Conversation` gains required `source_ref` / `source_kind` / `content_hash` properties. No
-node type added or removed, no edge legality changed — the legal-edge matrix is untouched, so
-nothing that routes or traverses the graph is affected.
-
-**Why:** the `Conversation` node is what every ingested fact hangs off via `derives-from`.
-Before this, it summarized its source without pointing at it, so provenance bottomed out in
-a node the agent itself wrote — no good answer to "that's not what we said" six months on.
-Now it points at the transcript in **its own datastore**, which is a better audit trail than
-storing transcripts *and* keeps PII custody out of context-mesh.
-
-**Dependents updated:** [ingestion-pipeline.md](ingestion-pipeline.md) (stage 1),
-`skills/ingest-conversation/SKILL.md` (stage 1 + the checkpoint).
-
-## Deliberately excluded (and why)
-
-- `is-a` — there is no classification hierarchy among instances; the type system *is* the
-  taxonomy backbone. (Per knowledge-graph-model.md.)
-- `Artifact` as a node type — too broad; replaced by concrete Group-B/C types.
-- `links-to`, `applies-across` — folded into `references` and `applies-to`.
-- Heavyweight relationship modifiers (weights, qualified edges) — defer until querying
-  demands them, per the dumb-substrate principle.
+Meshes record which vocabulary they were built against, in the Hub root index's
+`**Mesh vocabulary:**` line, so `setup-mesh` can migrate content written under an older
+convention.

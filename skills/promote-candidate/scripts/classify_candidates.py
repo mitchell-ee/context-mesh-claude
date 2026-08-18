@@ -92,7 +92,8 @@ def classify(fm, body):
         return "RESOLVE", ("An OpenQuestion does not promote -- it RESOLVES into another type "
                            "(vocabulary.md: 'resolves into one of the above'). It needs a "
                            "human decision, not a routing confirmation. Run the "
-                           "guided-resolution flow (ingestion-pipeline.md): surface the "
+                           "guided-resolution flow (see the RESOLVE section of SKILL.md): "
+                           "surface the "
                            "question with the context that raised it, offer the options and "
                            "what each would route to, and on a decision convert it to a "
                            "decided node. Only then is there anything to promote.")

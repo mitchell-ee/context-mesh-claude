@@ -1,8 +1,7 @@
 # <domain> — context index
 
-The index for one **domain folder** inside the AI Hub. (The Hub root has its own index,
-which additionally lists the domains and holds cross-cutting context — see
-[setup-scope.md](../../../docs/setup-scope.md).)
+The index for one **domain folder** inside the AI Hub. (The Hub root has its own index, which
+additionally lists the domains and holds cross-cutting context.)
 
 Read this first; load only what the current task needs.
 

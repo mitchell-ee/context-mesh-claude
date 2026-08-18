@@ -12,7 +12,8 @@ domain has no context yet" -- which is exactly the gap the survey reports.
 
 A claim is a context file the index lists. `business-context.md` existing and saying nothing
 is a LIE THE SKILL BELIEVES: routing reads the index, so ingestion would land a fact in a
-stub at high confidence. That is build-scope decision 4, and it survives unchanged.
+stub at high confidence. Setup creates containers; promotion creates files, once it has
+content for a home the index already declares.
 
 So: this script will create `staging/candidates/` and a stub `context-index.md` with NO
 entries. It will never create `technical/repo-overview.md`, and it will never add a row to
@@ -173,18 +174,44 @@ Read it first; load only what the current task needs. Do not load the whole mesh
 
 ## Cross-cutting canonical context
 
-<!-- SCAFFOLD: no entries yet. Setup does not author the manifest — the file list is
-     per-implementation config the engagement decides.
+<!-- SCAFFOLD: no entries yet. Setup does not author context files — the file list is
+     yours to decide. Add a row only when the file exists and says something.
 
      This root holds context that governs everybody (personas, target architecture, coding
-     standards). Context about one domain belongs in that domain's folder, not here. Add a
-     row only when the file exists and says something.
+     standards). Context about one domain belongs in that domain's folder, not here.
 
      EVERY PATH MUST BE A MARKDOWN LINK — see the note in a domain index. A backticked or
      plain-text path is invisible to the checker and to routing. -->
 
 | File | About | Load when |
 |---|---|---|
+
+<!-- A STARTING SET, not a specification. Every line below is optional; a team with four
+     context files and a team with twenty are both correctly configured. Uncomment a row
+     when the file exists, delete the ones you do not want, and rename freely to match what
+     your team already calls things.
+
+     Start with the HIGHEST-LEVEL file that covers an area. `technical/architecture.md` is a
+     better start than six separate architecture files -- split later, if one grows too big
+     to load for a single task. Starting with the split version is how a mesh ends up with
+     eighteen files nobody filled in.
+
+| [product/business-context.md](product/business-context.md) | Why this exists, what problem it solves, who depends on it | orienting on the product; weighing whether something is in scope |
+| [product/glossary.md](product/glossary.md) | Domain terms and shared vocabulary | reading anything that uses house jargon |
+| [product/design-principles.md](product/design-principles.md) | Product values, and how tradeoffs get resolved | making a judgment call between competing options |
+| [technical/architecture.md](technical/architecture.md) | How the system is put together: components, how they talk | changing structure; adding a component |
+| [technical/coding-standards.md](technical/coding-standards.md) | Language and style conventions, patterns, anti-patterns | writing or reviewing code |
+| [technical/testing-standards.md](technical/testing-standards.md) | Test types, coverage expectations, CI integration | writing tests; changing the test setup |
+| [technical/integration-map.md](technical/integration-map.md) | Cross-system dependencies: APIs, data stores, queues, jobs | tracing a dependency; changing an interface |
+| [process/ways-of-working.md](process/ways-of-working.md) | How work flows from idea to deployed; rituals, handoffs | onboarding; questioning who decides what |
+| [governance/data-handling.md](governance/data-handling.md) | Data classification, residency, encryption | touching customer or regulated data |
+
+     COLLECTIONS go in their own section, not this table -- a folder of same-typed files
+     gets one row for the folder, with a trailing slash. Personas are the common case:
+
+| [product/personas/](product/personas/) | `{{slug}}.md` | Customer and stakeholder personas, one per file | reasoning about who a user is, or whose problem a change solves |
+-->
+
 
 ## Staging
 

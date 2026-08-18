@@ -205,8 +205,7 @@ Only after a human decides does anything move.
 ## RESOLVE — an OpenQuestion isn't ready
 
 It has no promotion path. It isn't undecided about *where* it goes; it's undecided **full
-stop** — there is no fact yet. Run the guided-resolution flow
-([ingestion-pipeline.md](../../docs/ingestion-pipeline.md)):
+stop** — there is no fact yet. Run the guided-resolution flow:
 
 1. Surface the question with the context that raised it (`derives-from` the `Conversation`).
 2. Offer the options you can infer, and **what each would route to if chosen**.

@@ -14,7 +14,7 @@ So the exception is the point of this script, and it is a positive rule, not a m
 That second direction matters. `rendered-on -> product/story-map.md` is not a sidecar with a
 sloppy target; it is a claim that a *file* is the visual surface, which inverts the rule that
 a board is a view and never canonical. Accepting it would let the board become the source of
-truth by accident -- exactly what board-sidecars.md forbids.
+truth by accident -- exactly what the Board rule in docs/vocabulary.md forbids.
 
 Target forms, and how each resolves:
 
@@ -229,7 +229,7 @@ def resolve(edge, target, domain_name, hub_root, domains, node_ids, artifact_ids
             return ("board", False,
                     f"`rendered-on` points at a path (`{target}`). A board is an external "
                     f"VIEW addressed by ID, never a file -- a file target would make the "
-                    f"board canonical, which board-sidecars.md forbids.")
+                    f"board canonical, which docs/vocabulary.md forbids.")
         if not BOARD_REF.match(target):
             return ("board", False,
                     f"`rendered-on` target `{target}` is not a board reference. Expected "

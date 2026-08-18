@@ -1,4 +1,11 @@
-.claude/
+.claude/*
+# ...except the decision record, which is tracked in THIS repo and deliberately
+# never shipped: the plugin's ship list is derived from `git ls-tree publish/main`,
+# so a file that has never been published stays unpublished unless named with --add.
+# Note `.claude/*` rather than `.claude/`: git will not descend into an excluded
+# DIRECTORY, so a negation inside one never matches. Everything else in .claude/
+# (checkpoint, settings, scratch plans) stays ignored.
+!.claude/decisions.md
 .DS_Store
 __pycache__/
 *.pyc

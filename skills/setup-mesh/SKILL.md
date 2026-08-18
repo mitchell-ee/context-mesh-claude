@@ -36,9 +36,8 @@ It is **committed** — a property of the domain and its team, the same for whoe
 > The design is retained privately.
 
 **There is no separate scaffolding command.** Adding a domain is **this same skill run again**;
-it is idempotent, so there is no separate "add" mode
-([setup-scope.md](../../docs/setup-scope.md)). Ask which domains to include — don't discover
-them, and don't maintain a membership list.
+it is idempotent, so there is no separate "add" mode. Ask which domains to include — don't
+discover them, and don't maintain a membership list.
 
 **"None" is a complete answer to that question**, and the common one for a monorepo. Take it at
 face value: stand up the Hub root, create no `domains/` directory, and don't ask again or
@@ -119,14 +118,11 @@ One PR, not one per domain: there is only one repo.
 
 ## What this does NOT do — read this first
 
-**It does not generate context files.** Not `business-context.md`, not `coding-standards.md`,
-none of the manifest. Setup **discovers and declares what exists**; it never authors content.
+**It does not generate context files.** Not `business-context.md`, not `coding-standards.md`.
+Setup **discovers and declares what exists**; it never authors content. Two reasons:
 
-This is deliberate ([build-scope.md](../../docs/build-scope.md) decision 4). Two reasons:
-
-- **The file list is the manifest** — per-implementation config the engagement decides, not
-  something a wizard emits. Generating eighteen Layer A files would be the opposite of what
-  manifest-as-config means.
+- **Which files exist is the team's decision**, not something a wizard emits. Generating
+  eighteen files nobody asked for is the opposite of a starting set they shape themselves.
 - **An empty context file is worse than an absent one.** The index would list a file that
   exists and says nothing, and routing reads the index. Ingestion would confidently route a
   fact to `business-context.md — why the platform exists` and land it in a stub. **An absent
@@ -323,7 +319,7 @@ catching real breaks.
 
 It's a **positive rule, not a mute**, and it's enforced both ways: a `rendered-on` target must
 be an off-filesystem board reference and must **not** be a path (a file target would make the
-board canonical, which `board-sidecars.md` forbids), and no other edge type may target a
+board canonical, which [vocabulary.md](../../docs/vocabulary.md) forbids), and no other edge type may target a
 board. Whether the board *exists* is deliberately not checked — that's the vendor's API, and
 asking would couple the mesh to a vendor.
 

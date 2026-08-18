@@ -1,8 +1,14 @@
 # How context-mesh works
 
-This is a visual guide for humans to understand **what happens, in what order, and where a person has to decide
-something.** For the type system see [vocabulary.md](vocabulary.md); for where files live see
-[file-taxonomy.md](file-taxonomy.md). This document ties it all together.
+**What this is.** The complete picture of how context-mesh works: what happens, in what order,
+and where a person has to decide something.
+
+**What you get from reading it.** You will understand the whole loop — how a conversation
+becomes durable context — well enough to run it and to know what the tooling will and will not
+do on its own. Start here before the other docs.
+
+**The rest of the docs go deeper on one thing each:** [vocabulary.md](vocabulary.md) for the
+types of context, [file-taxonomy.md](file-taxonomy.md) for where files live.
 
 Below you'll find two views:
 
@@ -13,8 +19,13 @@ Below you'll find two views:
 
 ## 1. The lifecycle
 
-**Read it as three phases.** Setup happens once (then again per domain). Ingestion runs per
-conversation. Promotion runs when someone decides a batch of candidate changes should be incorporated into the context layer.
+**Read it as three phases.** Setup happens once. Ingestion runs per conversation. Promotion runs
+when someone decides a batch of candidates should become part of the context layer.
+
+**There is one workflow, not one per domain.** The Hub is a single repo. Domains are just
+folders inside it — another place a fact can be routed to — so ingesting a conversation that
+touches three domains is still one run, one checkpoint, and one PR. Each domain has its own
+index because routing needs to know what lives where, but you never run the loop three times.
 
 **The two diamonds are the only places a human must act.** Everything else is automated, and
 nothing crosses a diamond without human approval.
@@ -23,32 +34,32 @@ nothing crosses a diamond without human approval.
 flowchart TD
     subgraph SETUP["① SETUP — once, then again to add a domain"]
         direction LR
-        S1["<b>/setup-mesh</b><br/>survey → scaffold → declare"] --> S2["<b>context-index.md</b><br/>the routing input, and the only one"]
+        S1["<b>/setup-mesh</b><br/>survey → scaffold → declare"] --> S2["<b>context-index.md</b><br/>the routing input"]
     end
 
-    M["A meeting happens<br/><i>(Granola, Zoom, Slack, notes)</i>"]
+    M["A meeting happens<br/><i>Granola, Zoom, Slack, notes</i>"]
 
     subgraph INGEST["② INGESTION — once per conversation"]
-        P["<b>/structure-transcript</b><br/><i>optional pre-pass:</i> clean + label<br/>never types, never routes<br/><i>(also a plain prompt — runs anywhere)</i>"]
-        I1["<b>/ingest-conversation</b><br/>1 · identify the source<br/>2 · distill into typed chunks<br/>3 · propose placements<br/>3.5 · dedup against the target"]
-        GATE1{{"<b>HUMAN CHECKPOINT</b><br/>grouped by destination, riskiest group first<br/>approve · retry id · drop id"}}
+        P["<b>/structure-transcript</b><br/><i>optional:</i> clean + label<br/>never types or routes"]
+        I1["<b>/ingest-conversation</b><br/>1 · identify the source<br/>2 · distill into typed chunks<br/>3 · propose placements<br/>3.4 · resolve members<br/>3.5 · dedup"]
+        GATE1{{"<b>HUMAN CHECKPOINT</b><br/>grouped by destination<br/>approve · retry · drop"}}
         P --> I1
         I1 --> GATE1
-        GATE1 -->|"retry N / drop N"| I1
+        GATE1 -->|"retry / drop"| I1
     end
 
     ST[("<b>staging/candidates/</b><br/>proposed, not yet believed")]
 
     subgraph PROMOTE["③ PROMOTION — when someone decides"]
-        C["<b>/promote-candidate</b><br/>classify + batch by target file"]
-        V["MERGE · CONTRADICTS · RESOLVE<br/>NO-HOME · NEVER"]
-        GATE2{{"<b>PR REVIEW</b><br/>the mesh's only outward write"}}
+        C["<b>/promote-candidate</b><br/>classify + batch by target"]
+        V["MERGE · APPEND · CONTRADICTS<br/>RESOLVE · NO-HOME · NEVER"]
+        GATE2{{"<b>PR REVIEW</b><br/>the only outward write"}}
         C --> V --> GATE2
     end
 
-    CANON[("<b>Canonical context</b><br/>decided, durable, loaded by task")]
+    CANON[("<b>Canonical context</b><br/>decided, durable")]
     USE["Everyday work<br/><i>the point of all this</i>"]
-    TODO["Action items are <b>noticed and reported</b>,<br/>but not filed"]
+    TODO["Action items:<br/><b>reported, not filed</b>"]
 
     S2 -->|"routing reads this"| M
     M --> P
@@ -71,7 +82,7 @@ flowchart TD
 
 | Step | What it does | Who decides |
 |---|---|---|
-| **`/setup-mesh`** | Surveys the Hub, scaffolds containers, helps declare each `context-index.md`, migrates a mesh built on an older vocabulary, and reports the manifest. Idempotent — re-run it to add a domain. | A human supplies *what a file is about* and *when to load it*. A script cannot guess those. Migrations edit indexes and report; **moving content is always manually accomplished by a human**. |
+| **`/setup-mesh`** | Surveys what context the repo already has, scaffolds folders, helps declare each `context-index.md`, and lists everything the mesh tracks so you can check it. Idempotent — re-run it to add a domain. | A human supplies *what a file is about* and *when to load it*. A script cannot guess those. Migrations edit indexes and report; **moving content is always done by a human**. |
 | **`/structure-transcript`** | Optional. Turns a raw transcript into a clean, labelled one. **Cleanup and labelling only** — it never assigns a type. Also available as a plain prompt (`prompts/structure-transcript.md`) to run in any tool. | — |
 | **`/ingest-conversation`** | Distills into typed chunks, proposes a placement per chunk, then dedups/deconflicts against its intended target. The transcript itself is never modified. | — |
 | **The checkpoint** | Every proposed placement, **grouped by destination file**, groups ordered by their riskiest chunk. Then it asks how you want to read them. | **You.** `approve`, `retry <id> <reason>`, or `drop <id>`. |
@@ -102,15 +113,15 @@ filesystem path.
 flowchart TD
     HUB["<b>The AI Hub</b><br/><i>one repo, all context</i>"]
 
-    subgraph ROOT["Hub root — cross-cutting: governs everybody"]
-        RI["<b>context-index.md</b><br/>the root loader · declares the domains · mesh vocabulary"]
-        RP["product/<br/><i>business context, personas, glossary</i>"]
-        RT["technical/<br/><i>target architecture, coding standards</i>"]
+    subgraph ROOT["Hub root — governs everybody"]
+        RI["<b>context-index.md</b><br/>the root index<br/>declares the domains"]
+        RP["product/<br/><i>business context, personas</i>"]
+        RT["technical/<br/><i>architecture, standards</i>"]
         RG["process/ · governance/"]
         RS[("staging/candidates/")]
     end
 
-    subgraph DOMS["domains/ — OPTIONAL · every domain, and nothing else is one"]
+    subgraph DOMS["domains/ — OPTIONAL"]
         direction LR
         D1["<b>domains/payments/</b><br/>context-index.md<br/>technical/ · product/<br/>staging/candidates/"]
         D2["<b>domains/notify/</b><br/>context-index.md<br/>technical/<br/>staging/candidates/"]
@@ -128,14 +139,15 @@ flowchart TD
     class CODE ext
 ```
 
-### The two axes
+### Two questions decide where a file goes
 
-Every file answers two questions, and the layout makes both unambiguous:
+**Who does this govern?** Everybody, or one specific thing. **Is it decided yet?** The layout
+makes both answers visible from the path alone:
 
-| | **Cross-cutting** (Hub root) | **Domain** (`domains/<name>/`) |
+| | **Everybody** (Hub root) | **One domain** (`domains/<name>/`) |
 |---|---|---|
-| **Canonical** — decided | `product/business-context.md` | `domains/payments/technical/system-behavior.md` |
-| **Staging** — undecided | `staging/candidates/` | `domains/payments/staging/candidates/` |
+| **Decided** — canonical | `product/business-context.md` | `domains/payments/technical/system-behavior.md` |
+| **Not yet decided** — staging | `staging/candidates/` | `domains/payments/staging/candidates/` |
 
 **A domain is a directory under `domains/`. A folder called `product/` at
 the root is the cross-cutting product tree; a folder called `product/` under
@@ -209,17 +221,26 @@ which conversation, who raised it, when. That provenance chain is preserved.
 - **It does not currently track work.** No queues, no backlogs, no action items. A queue is the work
   itself, not context about it, and every team tracks work differently. Ingestion *notices*
   action items and reports them. Work items may be handled in the future, however (note that we've aspirationally mentioned stories elsewhere in this document). 
-- **It does not generate context files.** Setup creates *containers* — directories and an empty
-  index — never a file the index claims holds something. **An absent file is an honest gap; an
-  empty listed one is a lie the tooling believes.**
+- **Setup does not write context files.** It creates *containers* — folders and an empty index —
+  never a file the index claims holds something. **An absent file is an honest gap; an empty
+  listed one is a lie the tooling believes.** Setup can *suggest* what looks missing; it cannot
+  write it, because it has nothing to write from.
 - **It does not store raw transcripts** by default. It points at them where they already live.
 - **It does not file anything outward on its own.** The PR is where the skills stop.
+
+**Promotion does write files** — that is the difference. When the index declares a home that
+nobody has written yet, and promotion has content for it, promotion creates it. The rule is not
+"never create files"; it is **never index a file that says nothing.** Promotion has content in
+hand, so the file it creates says something the moment it exists.
+
+For collections, the same rule applies to members but not to folders: **promotion adds a member
+file, and never creates the collection folder itself.** A collection row pointing at a folder
+that does not exist is an error you fix, not something the tooling papers over.
 
 ## Where to go next
 
 | You want to… | Read |
 |---|---|
-| Understand the type system | [vocabulary.md](vocabulary.md) — start here; it is authoritative |
+| Understand the types of context | [vocabulary.md](vocabulary.md) |
 | Know where a given file belongs | [file-taxonomy.md](file-taxonomy.md) |
-| Set a Hub up | [setup-scope.md](setup-scope.md) |
-| Follow ingestion in detail | [ingestion-pipeline.md](ingestion-pipeline.md) |
+| Set a mesh up | Run `/setup-mesh` — it walks you through it |
