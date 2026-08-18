@@ -48,7 +48,7 @@ flowchart TD
 
     CANON[("<b>Canonical context</b><br/>decided, durable, loaded by task")]
     USE["Everyday work<br/><i>the point of all this</i>"]
-    TODO["Action items are <b>noticed and reported</b>,<br/>never filed"]
+    TODO["Action items are <b>noticed and reported</b>,<br/>but not filed"]
 
     S2 -->|"routing reads this"| M
     M --> P
