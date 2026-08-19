@@ -56,13 +56,14 @@ INDEX = check_setup.INDEX
 # Directories that are never context, whatever they contain. Kept deliberately short: this is
 # not a heuristic for what IS context, only a list of things that certainly are not. A false
 # entry here HIDES real context, so it stays boring.
+# NOTE: staging is NOT in this set. It is a PATH, possibly nested (`docs/staging`), and this
+# set is matched against single directory NAMES. Putting it here failed in both directions: a
+# nested value never matched, so candidates were surveyed as context; and a value whose first
+# segment is an ordinary folder (`docs/staging`) would have matched `docs` and skipped the
+# entire documentation tree. `walk_markdown` prunes staging by path instead.
 SKIP_DIRS = {
     ".git", ".github", "node_modules", "venv", ".venv", "__pycache__", "dist", "build",
     "target", "vendor", ".idea", ".vscode", "coverage", ".next", ".cache",
-    # Staging is proposed material, not context -- and it moves with the config, so this is
-    # read from the shared module rather than spelled out. A relocated staging tree that was
-    # still skipped by the literal name would have its candidates surveyed as context.
-    staging_config.STAGING_DIR,
     # Tooling that DESCRIBES a mesh rather than being one. Without these, running this
     # against a repo that packages context-mesh itself proposed `skills/setup-mesh/SKILL.md`
     # as product context -- confidently, and wrongly. A mesh's own machinery is not context
@@ -184,6 +185,18 @@ def walk_markdown(root):
 
     for dirpath, dirnames, filenames in os.walk(root, onerror=on_error):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
+
+        # Prune staging BY PATH, not by directory name -- it may be nested (`docs/staging`),
+        # in which case no single name identifies it. Checked against the path each child
+        # would have, so the staging tree is never descended into and its candidates are never
+        # proposed as context. Both the Hub root's staging and each domain's are caught,
+        # because `is_staging_path` matches the segments at any offset.
+        dirnames[:] = [
+            d for d in dirnames
+            if not staging_config.is_staging_path(
+                os.path.relpath(os.path.join(dirpath, d), root))
+        ]
+
         for f in sorted(filenames):
             if not f.endswith(".md") or f in SKIP_FILES:
                 continue

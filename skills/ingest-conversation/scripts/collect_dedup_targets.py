@@ -158,30 +158,22 @@ def collect_members(hub_root, target_path):
 
 
 def find_staging_dirs(hub_root):
-    """Every `staging/candidates/` in the Hub -- the root one plus one per domain.
+    """Every `<staging>/candidates/` in the Hub -- the root one plus one per domain.
 
-    Same walk as classify_candidates.find_staging_dirs, and deliberately so: the pool this
-    dedups against must be exactly the pool promotion will later offer. If the two ever
-    disagree about where candidates live, a claim is invisible to one of them.
+    Delegates to `staging_config.find_candidates_dirs`, which promotion also calls. The pool
+    this dedups against must be exactly the pool promotion will later offer: if the two ever
+    disagree about where candidates live, a claim is invisible to one of them. They used to be
+    two identical hand-written walks kept in step by a comment; now there is one function.
 
-    Returns (found, walk_errors). `os.walk` swallows OSError by default, so a staging dir
-    the walker cannot descend into simply never appears -- it is not found, not empty, and
-    NOT an error, which is indistinguishable from "that domain has no candidates". A real
-    candidate then goes uncompared and its duplicate ships. Verified by chmod 000 on a
-    populated staging dir: the pool silently lost a candidate and the script exited 0.
-    `onerror` is what makes that visible; the listdir guard below never even ran, because
-    the failure happened one level up during the walk.
+    The walk is ANCHORED per container (Hub root, each `domains/<name>/`) rather than scanning
+    the whole tree for a path tail. Scanning matched `<anything>/staging/candidates` at any
+    depth, so a stray directory buried in a repo was adopted as a real staging dir.
+
+    Returns (found, errors). A staging dir that exists but cannot be read is an ERROR, never a
+    silent omission -- "no candidates" and "could not look" are indistinguishable downstream,
+    and the second one ships every duplicate the pool contained.
     """
-    found, walk_errors = [], []
-
-    def on_walk_error(exc):
-        walk_errors.append((getattr(exc, "filename", "?"), str(exc)))
-
-    for dirpath, dirnames, _ in os.walk(hub_root, onerror=on_walk_error):
-        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
-        if staging_config.is_candidates_dir(dirpath):
-            found.append(dirpath)
-    return sorted(found), walk_errors
+    return staging_config.find_candidates_dirs(hub_root)
 
 
 def read_frontmatter(text):
@@ -221,8 +213,11 @@ def collect_staged(hub_root):
     """
     rows, unreadable, misconfig = [], [], []
 
-    staging_dirs, walk_errors = find_staging_dirs(hub_root)
-    unreadable.extend(walk_errors)
+    # `unreadable_dirs` are staging dirs that EXIST but could not be listed. They join the
+    # same fail-closed list as an unreadable candidate file: an empty pool and an unlooked-at
+    # pool are indistinguishable downstream, and the second one ships every duplicate.
+    staging_dirs, unreadable_dirs = find_staging_dirs(hub_root)
+    unreadable.extend(unreadable_dirs)
 
     # Found nothing where staging is configured to be? Check whether candidates exist under
     # some OTHER name before accepting an empty pool. Absent is legal; misconfigured is not,

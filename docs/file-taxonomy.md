@@ -228,12 +228,18 @@ raised it, when.
 **`staging/inbox/` is a drop location, not a collection.** No naming pattern, nothing routes to
 it. Processed items move to `staging/inbox/processed/`.
 
-**The staging tree can live somewhere else.** Set `CONTEXT_MESH_STAGING` and the whole tree
-moves together, keeping `candidates/` and `inbox/` beneath it:
+**The staging tree can live anywhere.** Set `CONTEXT_MESH_STAGING` and the whole tree moves
+together, keeping `candidates/` and `inbox/` beneath it. The value is a **path**, so it may be
+nested to any depth:
 
 ```bash
-export CONTEXT_MESH_STAGING=_incoming     # -> _incoming/candidates/, _incoming/inbox/
+export CONTEXT_MESH_STAGING=_incoming        # -> _incoming/candidates/
+export CONTEXT_MESH_STAGING=docs/staging     # -> docs/staging/candidates/
 ```
+
+The path is relative to **each container**, so one setting covers the Hub root and every
+domain. With `docs/staging`, the root's tree is at `docs/staging/` and the payments domain's
+at `domains/payments/docs/staging/`.
 
 It is set in **one** place and every script reads it — nothing else needs editing. The root
 index's Staging table documents the path for humans, so if you change one, change the other:

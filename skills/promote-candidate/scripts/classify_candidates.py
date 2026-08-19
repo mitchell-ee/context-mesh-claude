@@ -152,18 +152,19 @@ def classify(fm, body):
 
 
 def find_staging_dirs(root):
-    """Every `staging/candidates/` in the Hub -- the root one plus one per domain.
+    """Every `<staging>/candidates/` in the Hub -- the root one plus one per domain.
 
     Ingestion writes each candidate into the domain that owns the fact, and cross-cutting
-    facts into the root staging dir, so `--mesh` walks for them rather than assuming a
-    single location.
+    facts into the root staging dir, so `--mesh` finds them rather than assuming one location.
+
+    Delegates to the same function the dedup collector calls. These were two hand-written
+    walks kept identical by a comment; the pool promotion offers must equal the pool dedup
+    compared against, so they are now one function and cannot drift.
+
+    Returns (found, unreadable) -- an existing-but-unreadable staging dir is reported rather
+    than silently dropped.
     """
-    found = []
-    for dirpath, dirnames, _ in os.walk(root):
-        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
-        if staging_config.is_candidates_dir(dirpath):
-            found.append(dirpath)
-    return sorted(found)
+    return staging_config.find_candidates_dirs(root)
 
 
 def collect(cand_dir, rows, domain_label):
@@ -214,7 +215,18 @@ def main():
     rows = []
 
     if mesh_mode:
-        cand_dirs = find_staging_dirs(hub)
+        cand_dirs, unreadable = find_staging_dirs(hub)
+
+        # An existing staging dir that cannot be read is an error, not an empty one. Reported
+        # before the not-found branch, because it must never be mistaken for "nothing here".
+        if unreadable:
+            print("error: staging director(ies) exist but could not be read:", file=sys.stderr)
+            for path, err in unreadable:
+                print(f"  {path}  ({err})", file=sys.stderr)
+            print("  Their candidates would be silently missing from this plan.",
+                  file=sys.stderr)
+            return 1
+
         if not cand_dirs:
             print(f"error: no {staging_config.candidates_rel()} anywhere under {hub}",
                   file=sys.stderr)
@@ -225,10 +237,15 @@ def main():
             if misplaced:
                 print(staging_config.misconfig_message(misplaced), file=sys.stderr)
             return 2
+
         for d in cand_dirs:
-            # Label by the domain that owns the staging dir. This is presentational now:
+            # Label by the container that owns the staging dir. This is presentational now:
             # everything lives in one repo, so a batch spanning domains is still one PR.
-            owner = os.path.dirname(os.path.dirname(d))
+            #
+            # Derived by stripping the CONFIGURED staging path, not a fixed two levels --
+            # `dirname(dirname(d))` assumed `<owner>/staging/candidates` and mislabelled every
+            # domain once staging could be nested (`docs/staging` left the label as `docs`).
+            owner = staging_config.container_of(d, hub)
             if os.path.abspath(owner) == os.path.abspath(hub):
                 label = "(root)"
             else:

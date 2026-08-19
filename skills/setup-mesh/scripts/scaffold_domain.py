@@ -56,7 +56,13 @@ VOCABULARY = "v2.5"
 # the two are identical, and survey_mesh.py imports this rather than restating it -- the
 # survey once hardcoded its own copy and promised a directory this script would not create
 # (Minotaur finding 5).
-ROOT_DIRS = [staging_config.candidates_dir()]
+#
+# THE ROOT ALSO GETS `inbox/`, and the two lists diverge again for one reason: the ROOT index
+# template lists `<staging>/inbox/` and the domain template does not. A row naming a directory
+# that setup does not create is precisely the Minotaur-5 failure above, in the same file --
+# `a missing directory is an error` (file-taxonomy.md), so an advertised inbox must exist.
+# Whenever a row is added to a template, add its directory here.
+ROOT_DIRS = [staging_config.candidates_dir(), staging_config.inbox_dir()]
 DOMAIN_DIRS = [staging_config.candidates_dir()]
 
 DOMAIN_INDEX = """# {name} — context index

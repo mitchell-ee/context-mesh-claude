@@ -112,11 +112,16 @@ create `technical/repo-overview.md`, and never add a row to the index.
 **Staging need not live at `staging/`.** If the team keeps proposed material elsewhere, set
 `CONTEXT_MESH_STAGING` before running anything — the whole tree moves together, keeping
 `candidates/` and `inbox/` beneath it, and every script in all three skills reads that one
-variable:
+variable. The value is a **path** and may be nested to any depth:
 
 ```bash
-export CONTEXT_MESH_STAGING=_incoming
+export CONTEXT_MESH_STAGING=_incoming        # -> _incoming/candidates/
+export CONTEXT_MESH_STAGING=docs/staging     # -> docs/staging/candidates/
 ```
+
+It is interpreted **relative to each container**, so one setting covers the Hub root and every
+domain: `docs/staging` puts the root's tree at `docs/staging/` and payments' at
+`domains/payments/docs/staging/`.
 
 The scaffolded index documents the path and carries a note to keep the two in step. **If they
 drift, the tooling says so** rather than reporting an empty staging tree as normal — a
