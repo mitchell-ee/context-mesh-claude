@@ -261,10 +261,11 @@ def manifest(hub_root):
     in an index and are not: a tracked file that is missing is a broken promise, and an
     untracked file that exists is invisible to routing.
     """
+    # ONE INDEX, at the Hub root (v0.17.0). A domain's files are declared there with
+    # `domains/<name>/...` paths, so there is nothing per-domain to read. Iterating domains
+    # here would report every one of them as `no_index`, which is now the normal state.
     groups = []
     containers = [("(hub root)", hub_root, True)]
-    containers += [(f"{DOMAINS_DIR}/{os.path.basename(d)}", d, False)
-                   for d in discover(hub_root)]
 
     for label, path, _is_hub in containers:
         index_path = os.path.join(path, INDEX)
@@ -436,9 +437,11 @@ def main():
         # and the triage run above is what decides whether ingestion can proceed.
         return 0
 
-    # The root is always surveyed, and always first -- it is the one thing that must exist.
+    # The root is surveyed, and it is the ONLY container (v0.17.0). Domains do not hold an
+    # index or a staging tree, so surveying one would ask a question it cannot answer and
+    # report BLOCKED for every domain in a correctly built mesh -- a fail-CLOSED bug, the
+    # family this codebase has twice.
     results = [survey_one(hub_root, hub=True, hub_root=hub_root)]
-    results += [survey_one(d, hub_root=hub_root) for d in discover(hub_root)]
     blocked = [r for r in results if r["state"] == "BLOCKED"]
 
     unreadable = unreadable_context(hub_root)
@@ -448,16 +451,21 @@ def main():
             {"repos": results, "unreadable_context": unreadable}, indent=2))
         return 1 if blocked else 0
 
-    report(results, unreadable)
+    report(results, unreadable,
+           domain_names=[os.path.basename(d) for d in discover(hub_root)])
     return 1 if blocked else 0
 
 
-def report(results, unreadable=()):
+def report(results, unreadable=(), domain_names=()):
     ready = [r for r in results if r["state"] == "READY"]
     partial = [r for r in results if r["state"] == "PARTIAL"]
     blocked = [r for r in results if r["state"] == "BLOCKED"]
 
-    domains = [r for r in results if not r["is_hub"]]
+    # Counted from the FILESYSTEM, not from `results`. Domains are no longer surveyed as
+    # containers (v0.17.0), so deriving this from the result list reported "0 domain(s)" for a
+    # mesh that plainly had two. They still exist and are still worth naming; they are simply
+    # not things that hold an index.
+    domains = list(domain_names)
 
     print(f"Mesh survey: Hub root + {len(domains)} domain(s)")
     print()

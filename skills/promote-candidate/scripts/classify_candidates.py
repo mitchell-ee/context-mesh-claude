@@ -31,9 +31,13 @@ whole, not three sequential passes that conflict with each other.
 Usage:
     classify_candidates.py <hub-root>
     classify_candidates.py <hub-root> --json
-    classify_candidates.py <hub-root> --mesh     # walk root + every domain's staging
+    classify_candidates.py <hub-root> --mesh     # accepted, no-op (see below)
 
-Exit codes: 0 = classified, 2 = bad input.
+`--mesh` meant "walk the root plus every domain's staging" when a domain had its own staging
+tree. Staging is centralized as of v0.17.0, so every run reads the one tree and the flag does
+nothing. It is still accepted so existing invocations do not break.
+
+Exit codes: 0 = classified, 1 = a staging dir exists but could not be read, 2 = bad input.
 """
 
 import json
@@ -151,6 +155,21 @@ def classify(fm, body):
     return "MERGE", "The claim lands in a section of the target file."
 
 
+def domain_of_target(target):
+    """The domain a target path belongs to, or `(cross-cutting)` for a Hub-root path.
+
+    `domains/payments/technical/x.md` -> `payments`. Anything not under `domains/` is
+    cross-cutting context at the Hub root, which is a real answer and not a missing one.
+
+    Presentational only -- it groups the promotion plan for a human reader. Nothing routes or
+    decides on it.
+    """
+    segs = [s for s in str(target).replace(os.sep, "/").split("/") if s]
+    if len(segs) >= 2 and segs[0] == "domains":
+        return segs[1]
+    return "(cross-cutting)"
+
+
 def find_staging_dirs(root):
     """Every `<staging>/candidates/` in the Hub -- the root one plus one per domain.
 
@@ -167,8 +186,13 @@ def find_staging_dirs(root):
     return staging_config.find_candidates_dirs(root)
 
 
-def collect(cand_dir, rows, domain_label):
-    """Read one domain's candidates into `rows`. Shared by single-dir and mesh mode."""
+def collect(cand_dir, rows):
+    """Read the Hub's candidates into `rows`.
+
+    Took a `domain_label` until v0.17.0, derived from which staging dir the candidate sat in.
+    With one staging tree that label was the same for every candidate; the domain now comes
+    from each candidate's target path instead (`domain_of_target`).
+    """
     for f in sorted(os.listdir(cand_dir)):
         if not f.endswith(".md") or f.endswith("-transcript.md"):
             continue
@@ -191,7 +215,11 @@ def collect(cand_dir, rows, domain_label):
         rows.append({
             "id": fm.get("id", f[:-3]),
             "file": f,
-            "domain": domain_label,
+            # Read from the TARGET PATH, not from which staging dir the candidate sat in.
+            # With staging centralized (v0.17.0) every candidate comes from the same folder,
+            # so the old source-derived label said "(root)" for all of them. The target is
+            # where the domain actually shows: `domains/payments/technical/x.md` -> payments.
+            "domain": domain_of_target(fm.get("target", "")),
             "type": fm.get("type", "?"),
             "tag": fm.get("tag", ""),
             "target": fm.get("target", ""),
@@ -205,7 +233,9 @@ def main():
     argv = sys.argv[1:]
     args = [a for a in argv if not a.startswith("--")]
     as_json = "--json" in argv
-    mesh_mode = "--mesh" in argv
+    # `--mesh` is accepted and ignored (v0.17.0). It used to mean "walk every domain's
+    # staging"; there is one staging tree now, so every run is what --mesh used to be. Kept as
+    # a silent no-op rather than an error so existing invocations and docs do not break.
 
     if len(args) != 1:
         print(__doc__)
@@ -214,54 +244,32 @@ def main():
     hub = args[0]
     rows = []
 
-    if mesh_mode:
-        cand_dirs, unreadable = find_staging_dirs(hub)
+    # ONE staging tree (v0.17.0), so there is one path here rather than two. `--mesh` used to
+    # select "walk every domain's staging" and is now a no-op, accepted so existing scripts,
+    # docs, and muscle memory keep working rather than erroring on an unknown flag.
+    cand_dirs, unreadable = find_staging_dirs(hub)
 
-        # An existing staging dir that cannot be read is an error, not an empty one. Reported
-        # before the not-found branch, because it must never be mistaken for "nothing here".
-        if unreadable:
-            print("error: staging director(ies) exist but could not be read:", file=sys.stderr)
-            for path, err in unreadable:
-                print(f"  {path}  ({err})", file=sys.stderr)
-            print("  Their candidates would be silently missing from this plan.",
-                  file=sys.stderr)
-            return 1
+    # An existing staging dir that cannot be read is an error, not an empty one. Reported
+    # before the not-found branch, because it must never be mistaken for "nothing here".
+    if unreadable:
+        print("error: staging director(ies) exist but could not be read:", file=sys.stderr)
+        for path, err in unreadable:
+            print(f"  {path}  ({err})", file=sys.stderr)
+        print("  Their candidates would be silently missing from this plan.", file=sys.stderr)
+        return 1
 
-        if not cand_dirs:
-            print(f"error: no {staging_config.candidates_rel()} anywhere under {hub}",
-                  file=sys.stderr)
-            # Name the likely cause instead of leaving the reader to guess. A relocated tree
-            # with the variable unset is indistinguishable from an empty mesh from the error
-            # text alone, and the candidates are sitting right there under another name.
-            misplaced = staging_config.find_misplaced_candidates(hub)
-            if misplaced:
-                print(staging_config.misconfig_message(misplaced), file=sys.stderr)
-            return 2
+    if not cand_dirs:
+        print(f"error: no {staging_config.candidates_rel()} under {hub}", file=sys.stderr)
+        # Name the likely cause instead of leaving the reader to guess. A relocated tree with
+        # the variable unset -- or a per-domain tree left over from before centralization --
+        # is indistinguishable from an empty mesh from the error text alone.
+        misplaced = staging_config.find_misplaced_candidates(hub)
+        if misplaced:
+            print(staging_config.misconfig_message(misplaced), file=sys.stderr)
+        return 2
 
-        for d in cand_dirs:
-            # Label by the container that owns the staging dir. This is presentational now:
-            # everything lives in one repo, so a batch spanning domains is still one PR.
-            #
-            # Derived by stripping the CONFIGURED staging path, not a fixed two levels --
-            # `dirname(dirname(d))` assumed `<owner>/staging/candidates` and mislabelled every
-            # domain once staging could be nested (`docs/staging` left the label as `docs`).
-            owner = staging_config.container_of(d, hub)
-            if os.path.abspath(owner) == os.path.abspath(hub):
-                label = "(root)"
-            else:
-                label = os.path.basename(owner)
-            collect(d, rows, label)
-    else:
-        cand_dir = staging_config.candidates_dir(hub)
-        if not os.path.isdir(cand_dir):
-            print(f"error: no {staging_config.candidates_rel()} under {hub}", file=sys.stderr)
-            print("       (the Hub has one per domain -- use --mesh to walk them all)",
-                  file=sys.stderr)
-            misplaced = staging_config.find_misplaced_candidates(hub)
-            if misplaced:
-                print(staging_config.misconfig_message(misplaced), file=sys.stderr)
-            return 2
-        collect(cand_dir, rows, os.path.basename(os.path.abspath(hub)))
+    for d in cand_dirs:
+        collect(d, rows)
 
     if as_json:
         print(json.dumps({"hub": hub, "candidates": rows}, indent=2))
@@ -303,8 +311,10 @@ def main():
             print()
             kind = "collection" if target.endswith("/") else "file"
             print(f"  {target}  ({len(group)} candidate(s), {kind})")
-            if mesh_mode:
-                print(f"    domain: {', '.join(domains)}")
+            # Always shown now. It used to be gated on `--mesh`, because only that mode could
+            # span domains; with one staging tree every run can, so gating it would hide the
+            # answer in exactly the runs that need it.
+            print(f"    domain: {', '.join(domains)}")
             linked = [r for r in group if r["duplicate_of"]]
             for r in group:
                 mark = "  BLOCKED" if r["verdict"] == "CONTRADICTS" else ""
@@ -332,7 +342,7 @@ def main():
                 print(f"       BEFORE merging the rest -- they may change what the "
                       f"others say.")
         print()
-        if mesh_mode and len(batches) > 1:
+        if len(batches) > 1:
             print(f"  {len(batches)} file(s) affected -> 1 PR. All context lives in one "
                   f"repo, so the")
             print("  batch is reviewed and merged as a single change.")

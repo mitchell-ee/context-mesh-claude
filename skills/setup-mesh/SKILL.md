@@ -377,9 +377,8 @@ unreported before.
 ## When you're done
 
 **Always end by showing the manifest** — `survey_mesh.py <hub-root> --manifest`. It lists
-every file the indexes track, grouped by the Hub root and each domain, marking each `ok`,
-`pending` (declared but not yet written — promotion will create it), or `unlisted` (present
-but invisible to routing).
+every file the index tracks, marking each `ok`, `pending` (declared but not yet written —
+promotion will create it), or `unlisted` (present but invisible to routing).
 
 Show it in full rather than summarizing. The triage output says what is *broken*; the
 manifest is how a human checks what is **right** — a file tracked under the wrong domain, or

@@ -17,9 +17,9 @@ with no script or prompt edited.
     staging/candidates/   ->   docs/staging/candidates/
     staging/inbox/        ->   docs/staging/inbox/
 
-The path is interpreted RELATIVE TO EACH CONTAINER -- the Hub root and every `domains/<name>/`
-folder -- so one variable serves them all. With `docs/staging`, the root's tree is at
-`<hub>/docs/staging/` and payments' at `<hub>/domains/payments/docs/staging/`.
+The path is interpreted RELATIVE TO THE HUB ROOT. **There is exactly one staging tree**
+(v0.17.0) -- domains do not have their own. With `docs/staging`, the mesh's staging is at
+`<hub>/docs/staging/` and nowhere else.
 
 **Every comparison here works on segment tuples, never on a basename or a substring.** The
 first version compared `os.path.basename(parent) == STAGING_DIR`, which is true only for a
@@ -28,10 +28,11 @@ misconfiguration warning then advised setting the variable to `staging` -- confi
 A substring test fails differently, matching a directory whose name merely ends with the
 configured value.
 
-**The staging walk is anchored per container, not a search for a path tail.** An unanchored
+**The staging walk is anchored to the container, not a search for a path tail.** An unanchored
 match accepted `<anything>/staging/candidates` at any depth, so a stray directory buried in a
-repo was adopted as a real staging dir. `find_candidates_dirs` enumerates containers and looks
-in each; `containers()` is the only place the `domains/` layout is encoded.
+repo was adopted as a real staging dir. `find_candidates_dirs` resolves the path directly;
+`containers()` is the only place the container model is encoded, and is deliberately kept as a
+function so reintroducing per-domain staging would be a change in one place.
 
 ## `state: staging` is a different thing with the same word
 
@@ -142,54 +143,41 @@ def is_candidates_dir(dirpath, container=None):
 
 
 def containers(hub_root):
-    """Every container in the Hub: the root, plus each `domains/<name>/` directory.
+    """The containers that own a staging tree and an index. **The Hub root, and only it.**
 
-    A container is the unit that owns a staging tree and an index. Enumerating them is what
-    lets the staging walk be anchored rather than matching a floating path tail -- and it is
-    also the only place the `domains/` layout is encoded, so a change there lands once.
+    Centralized as of v0.17.0. Until then a domain was a container too: each got its own
+    `context-index.md` and its own `staging/candidates/`. That split was removed because
+    neither benefit claimed for it was real --
+
+      * **Progressive disclosure did not apply.** Routing reads the root index AND every
+        domain index on every run, so splitting saved nothing and only made N places to edit.
+      * **Per-team ownership did not exist.** No CODEOWNERS was ever generated, and
+        `vocabulary.md` is explicit that ownership is declared via `owned-by` metadata,
+        "not structural -- the filesystem does not enforce it."
+
+    while the costs were real: N indexes to keep valid, and two staging walks that had to
+    agree exactly or a claim went invisible to one of them (fail-open #16).
+
+    This function is kept rather than inlined. It is the ONE place the container model is
+    encoded, so a future decision to reintroduce per-team review -- a second gate after
+    ingestion, or a domain-targeted ingestion run -- changes this and the callers follow.
+
+    `domains/<name>/` still exists and still holds context files; it is simply no longer a
+    container. A domain remains exactly a directory under `domains/`.
     """
-    found = [hub_root]
-    domains = os.path.join(hub_root, "domains")
-    if os.path.isdir(domains):
-        try:
-            for name in sorted(os.listdir(domains)):
-                path = os.path.join(domains, name)
-                if os.path.isdir(path) and not name.startswith("."):
-                    found.append(path)
-        except OSError:
-            # An unreadable domains/ is reported by the callers' own walk error handling; it
-            # must not silently truncate the container list here.
-            pass
-    return found
-
-
-def container_of(candidates_path, hub_root):
-    """The container (Hub root or domain folder) that owns a `<staging>/candidates` directory.
-
-    Strips the CONFIGURED staging path plus `candidates`, rather than a fixed number of
-    levels. `os.path.dirname(os.path.dirname(p))` was correct only while staging was a single
-    segment; with `docs/staging` it stopped one level short and labelled every domain `docs`.
-
-    Falls back to `hub_root` if the path does not sit under the expected shape, so a caller
-    labelling output cannot crash on an unexpected layout.
-    """
-    depth = len(STAGING_SEGMENTS) + 1          # staging segments + `candidates`
-    owner = os.path.abspath(candidates_path)
-    for _ in range(depth):
-        owner = os.path.dirname(owner)
-    return owner if owner else os.path.abspath(hub_root)
+    return [hub_root]
 
 
 def find_candidates_dirs(hub_root):
-    """Every container's `<staging>/candidates` that actually exists, anchored per container.
+    """The Hub's `<staging>/candidates` -- a list, because callers iterate it.
 
-    This replaces walking the whole tree for a path tail. The two scripts that need the staged
-    pool must agree exactly about where candidates live -- if they disagree, a claim is
-    invisible to one of them -- so they call THIS rather than each implementing the walk.
+    Returns (found, unreadable), a list of at most one. Kept plural because both callers walk
+    the result, and because the container model is deliberately left as the seam to change if
+    per-domain staging ever returns.
 
-    Returns (found, unreadable). A container whose staging dir exists but cannot be read is
-    reported, never silently skipped: "no candidates" and "could not look" are the two states
-    this codebase has repeatedly conflated, and the second one ships duplicates.
+    An existing-but-unreadable staging dir is REPORTED, never silently skipped: "no
+    candidates" and "could not look" are the two states this codebase has repeatedly
+    conflated, and the second one ships duplicates.
     """
     found, unreadable = [], []
     for container in containers(hub_root):
@@ -241,10 +229,13 @@ def find_misplaced_candidates(hub_root):
     parent's basename produced advice that was confidently wrong -- it told the reader to set
     the variable to `staging` for a tree that was actually at `docs/staging`.
 
-    The inferred value is relative to the container that owns it -- the Hub root for a root
-    staging dir, the domain folder for a domain's -- because that is what the variable means.
-    A domain's `domains/payments/docs/staging/candidates` therefore yields `docs/staging`, the
-    same value the root one yields, which is exactly right: one variable serves every container.
+    The inferred value is relative to the Hub root, because that is what the variable means.
+
+    Since v0.17.0 this also catches the OTHER misplacement: a `candidates/` under
+    `domains/<name>/`, left over from when a domain was a container. Staging is centralized
+    now, so those candidates are invisible to promotion and dedup -- exactly the condition
+    this function exists to make loud. They are reported with `domain: <name>` as the inferred
+    value, which no `export` line can fix, so `misconfig_message` names the real remedy.
     """
     misplaced = []
     hub_abs = os.path.abspath(hub_root)
@@ -261,30 +252,60 @@ def find_misplaced_candidates(hub_root):
         if os.path.abspath(dirpath) in correct:
             continue
 
-        # Strip the container prefix to get the staging path as the variable would express it.
+        # Strip the Hub prefix to get the staging path as the variable would express it.
         rel = os.path.relpath(os.path.abspath(os.path.dirname(dirpath)), hub_abs)
         segs = _segments(rel)
-        # A domain's dirs sit under `domains/<name>/`; drop that so the inferred value is
-        # container-relative and matches what the root would need.
+
+        # A leftover per-domain staging tree. Relocating the variable cannot reach it -- the
+        # candidates have to MOVE to the root -- so it is flagged as its own kind of finding.
         if len(segs) >= 2 and segs[0] == "domains":
-            segs = segs[2:]
+            misplaced.append((dirpath, f"domain: {segs[1]}"))
+            continue
+
         if segs:
             misplaced.append((dirpath, "/".join(segs)))
     return sorted(misplaced)
 
 
 def misconfig_message(misplaced):
-    """The warning text for `find_misplaced_candidates` output. One wording, both scripts."""
-    names = sorted({inferred for _, inferred in misplaced})
-    return (
+    """The warning text for `find_misplaced_candidates` output. One wording, both scripts.
+
+    Two remedies, because there are two causes and only one of them is an env-var fix. A
+    leftover per-domain staging tree cannot be reached by pointing the variable at it -- the
+    candidates must move to the Hub root -- so suggesting an `export` there would be advice
+    that silently does nothing.
+    """
+    domain_hits = sorted({inf for _, inf in misplaced if inf.startswith("domain: ")})
+    path_hits = sorted({inf for _, inf in misplaced if not inf.startswith("domain: ")})
+
+    lines = [
         f"WARNING: no candidates found under `{STAGING_DIR}/`, but {len(misplaced)} "
-        f"`{CANDIDATES_DIR}/` director(ies) exist under: {', '.join(names)}.\n"
-        f"  Staging is configured as `{STAGING_DIR}/` via {ENV_VAR}. If this mesh keeps its "
-        f"staging tree somewhere else, set it:\n"
-        f"      export {ENV_VAR}={names[0]}\n"
-        f"  Until then these candidates are INVISIBLE to dedup and promotion -- which looks "
-        f"exactly like a mesh that has never ingested anything."
+        f"`{CANDIDATES_DIR}/` director(ies) exist elsewhere.",
+    ]
+
+    if path_hits:
+        lines += [
+            f"  Found under: {', '.join(path_hits)}.",
+            f"  Staging is configured as `{STAGING_DIR}/` via {ENV_VAR}. If this mesh keeps "
+            f"its staging tree somewhere else, set it:",
+            f"      export {ENV_VAR}={path_hits[0]}",
+        ]
+
+    if domain_hits:
+        names = ", ".join(h.split("domain: ", 1)[1] for h in domain_hits)
+        lines += [
+            f"  Per-domain staging found in: {names}.",
+            "  Staging is CENTRALIZED (v0.17.0) -- only the Hub root has a staging tree, and "
+            "no environment variable reaches these.",
+            f"  Move their candidates into `{candidates_rel()}` at the Hub root and delete "
+            "the empty domain staging folders.",
+        ]
+
+    lines.append(
+        "  Until then these candidates are INVISIBLE to dedup and promotion -- which looks "
+        "exactly like a mesh that has never ingested anything."
     )
+    return "\n".join(lines)
 
 
 def is_staging_first_segment(p):

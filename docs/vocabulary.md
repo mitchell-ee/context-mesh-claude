@@ -99,6 +99,10 @@ tree; the same name under `domains/payments/` belongs to that domain.
 
 **A domain need not map to a code repository.** It may cover one repo, several, or part of one.
 
+**A domain holds context files and nothing else.** It has no index and no staging tree of its
+own — both are centralized at the Hub root, and its files are declared in the root index under
+their full path (`domains/payments/technical/system-behavior.md`).
+
 **Zero domains is legal and complete.** A mesh whose context is entirely cross-cutting never
 instantiates this type, and that is correct use of the schema. Nothing may report an absent
 `domains/` as a gap.

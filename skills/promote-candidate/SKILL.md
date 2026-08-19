@@ -52,15 +52,17 @@ The classifier groups these with their batch and marks them `DUPLICATE OF <id>`.
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/promote-candidate/scripts/classify_candidates.py" <hub-root>          # one staging dir
-python3 "${CLAUDE_PLUGIN_ROOT}/skills/promote-candidate/scripts/classify_candidates.py" <hub-root> --mesh   # root + every domain's staging
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/promote-candidate/scripts/classify_candidates.py" <hub-root>   # the Hub's one staging tree
 ```
 
 Candidates landing in **one document are one edit**, reviewed whole.
 
-**The Hub has one `staging/candidates/` per domain, plus one at the root** — ingestion writes
-each candidate into the domain that owns the fact, and cross-cutting facts to the root.
-`--mesh` walks them all. A batch spanning several domains is still **one PR**: everything
-lives in one repo.
+**The Hub has ONE `staging/candidates/`, at the root** (v0.17.0) — every candidate lands there
+regardless of which domain it is about, and its `target:` records where it will go. A batch
+spanning several domains is still **one PR**: everything lives in one repo.
+
+`--mesh` used to mean "walk every domain's staging too". It is now a no-op, still accepted so
+existing invocations keep working.
 
 **The batch key is the bare `target`, which is now unambiguous.** It used to have to be
 `(repo, target)`, because a `target` was *repo-relative* and `technical/system-behavior.md`

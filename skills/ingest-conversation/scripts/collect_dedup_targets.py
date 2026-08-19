@@ -158,16 +158,16 @@ def collect_members(hub_root, target_path):
 
 
 def find_staging_dirs(hub_root):
-    """Every `<staging>/candidates/` in the Hub -- the root one plus one per domain.
+    """The Hub's `<staging>/candidates/`. One tree, at the root (v0.17.0).
 
     Delegates to `staging_config.find_candidates_dirs`, which promotion also calls. The pool
     this dedups against must be exactly the pool promotion will later offer: if the two ever
     disagree about where candidates live, a claim is invisible to one of them. They used to be
     two identical hand-written walks kept in step by a comment; now there is one function.
 
-    The walk is ANCHORED per container (Hub root, each `domains/<name>/`) rather than scanning
-    the whole tree for a path tail. Scanning matched `<anything>/staging/candidates` at any
-    depth, so a stray directory buried in a repo was adopted as a real staging dir.
+    The path is ANCHORED to the Hub root rather than scanned for as a path tail. Scanning
+    matched `<anything>/staging/candidates` at any depth, so a stray directory buried in a repo
+    was adopted as a real staging dir.
 
     Returns (found, errors). A staging dir that exists but cannot be read is an ERROR, never a
     silent omission -- "no candidates" and "could not look" are indistinguishable downstream,

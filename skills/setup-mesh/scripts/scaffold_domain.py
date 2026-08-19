@@ -57,89 +57,22 @@ VOCABULARY = "v2.5"
 # survey once hardcoded its own copy and promised a directory this script would not create
 # (Minotaur finding 5).
 #
-# THE ROOT ALSO GETS `inbox/`, and the two lists diverge again for one reason: the ROOT index
-# template lists `<staging>/inbox/` and the domain template does not. A row naming a directory
-# that setup does not create is precisely the Minotaur-5 failure above, in the same file --
-# `a missing directory is an error` (file-taxonomy.md), so an advertised inbox must exist.
-# Whenever a row is added to a template, add its directory here.
+# THE ROOT ALSO GETS `inbox/`, because the ROOT index template lists `<staging>/inbox/`. A row
+# naming a directory that setup does not create is precisely the Minotaur-5 failure above, in
+# the same file -- `a missing directory is an error` (file-taxonomy.md), so an advertised inbox
+# must exist. Whenever a row is added to a template, add its directory here.
 ROOT_DIRS = [staging_config.candidates_dir(), staging_config.inbox_dir()]
-DOMAIN_DIRS = [staging_config.candidates_dir()]
 
-DOMAIN_INDEX = """# {name} — context index
-
-Read this first; load only what the current task needs.
-
-**This file is the manifest, the routing input, and the progressive-disclosure contract.**
-It is what ingestion reads to decide where a fact belongs — and the *only* thing it reads
-to decide that. A file not listed here is invisible to routing.
-
-## Domain identity
-
-- **Domain:** `{name}`
-- **About:** <one line — what this domain covers>
-- **Owned by:** <team>
-- **ID prefix:** `{name}:` (e.g. `{name}:OPP-0001`)
-
-<!-- A domain is a namespace, not necessarily a code repository. It may map to one repo,
-     span several, or be finer than one. Say which here, in **About**. -->
-
-## Canonical context
-
-<!-- SCAFFOLD: no entries yet. This is an honest empty index, not a broken one.
-
-     Setup does NOT invent rows here. Every entry needs two things only the team knows:
-       - **About** — what the file covers, in one line
-       - **Load when** — the progressive-disclosure condition routing matches against
-
-     Add a row only when the file it names actually exists and says something. A row
-     pointing at a stub is worse than no row: routing would send facts there.
-
-     EVERY PATH MUST BE A MARKDOWN LINK. The checker extracts paths with a link regex,
-     so a backticked or plain-text path is invisible to it and to routing. A row is:
-
-       | [LABEL](PATH.md) | what the file covers | when to load it |
-
-     where LABEL and PATH are both the file's path, e.g. technical/system-behavior.md.
-
-     The shape is spelled out rather than shown filled in, deliberately: the regex does
-     not know it is reading a comment, so a realistic example row here would be parsed
-     as a real entry and reported as a file that is listed but missing. -->
-
-| File | About | Load when |
-|---|---|---|
-
-## Discovery artifacts
-
-<!-- SCAFFOLD: unanswered. Say **"None."** if this team does not run continuous
-     discovery — an explicit "none" tells routing there are no IDs to reference,
-     whereas an absent answer is ambiguous. -->
-
-## Staging
-
-| Location | Purpose |
-|---|---|
-| `{candidates}` | Proposed nodes and edges awaiting the human gate. Nothing here is canonical. |
-
-<!-- The staging tree may live somewhere other than `staging/`. It is set in ONE place --
-     the `{env_var}` environment variable -- and the whole tree moves together,
-     keeping `candidates/` and `inbox/` beneath it. If you change the path above, set that
-     variable to match: this table documents the location, but the scripts read the variable,
-     and a mismatch means the index describes a folder nothing reads or writes. -->
-
-## Not in this mesh
-
-<!-- SCAFFOLD: unanswered, and worth answering. Listing what is deliberately absent is
-     what lets routing say "no home" honestly instead of picking the nearest survivor.
-
-     FORMAT — one bullet per gap, and DO NOT markdown-link the filename. A link here
-     would be read as a context file that is listed but missing. Backticks, deliberately:
-
-       - `technical/api-contract.md` — this domain exposes no public API
-       - `product/personas/` — personas are cross-cutting; see the Hub root
-
-     A deliberate gap ("should never exist here"), a pending home ("not written yet"), and
-     a broken link ("was deleted") are three different states. Only the first goes here. -->
-"""
+# A DOMAIN GETS NO STAGING AND NO INDEX (v0.17.0). Staging and the index are centralized at
+# the Hub root; a domain is a folder of context files and an ID namespace, not a container.
+#
+# It gets `technical/` and nothing more. That is not a claim about what the domain contains --
+# it is the one folder the taxonomy shows for every domain, and it exists so the domain is a
+# real, git-trackable directory rather than an empty name. Everything else (`product/`,
+# `process/`) is added by the team when they have something to put in it. Scaffolding the full
+# set would author structure nobody asked for, which is the failure this script exists to
+# avoid: setup creates containers, never claims.
+DOMAIN_DIRS = ["technical"]
 
 ROOT_INDEX = """# AI Hub — context index
 
@@ -277,6 +210,12 @@ def scaffold(path, name, is_root, dry_run=False):
             with open(os.path.join(full, ".gitkeep"), "w"):
                 pass
 
+    # ONLY THE ROOT GETS AN INDEX (v0.17.0). There is one index for the whole mesh; a domain's
+    # context files are declared in it with `domains/<name>/...` paths. A domain folder with no
+    # index is the normal, correct state -- not a half-finished container.
+    if not is_root:
+        return created, skipped
+
     index_path = os.path.join(path, INDEX)
     if os.path.isfile(index_path):
         # NEVER rewrite an existing index. It is authored -- the team's entries, load
@@ -286,13 +225,10 @@ def scaffold(path, name, is_root, dry_run=False):
     else:
         created.append(INDEX)
         if not dry_run:
-            body = (ROOT_INDEX.format(vocabulary=VOCABULARY,
-                                      candidates=staging_config.candidates_rel(),
-                                      inbox=staging_config.inbox_rel(),
-                                      env_var=staging_config.ENV_VAR) if is_root
-                    else DOMAIN_INDEX.format(name=name,
-                                             candidates=staging_config.candidates_rel(),
-                                             env_var=staging_config.ENV_VAR))
+            body = ROOT_INDEX.format(vocabulary=VOCABULARY,
+                                     candidates=staging_config.candidates_rel(),
+                                     inbox=staging_config.inbox_rel(),
+                                     env_var=staging_config.ENV_VAR)
             with open(index_path, "w") as fh:
                 fh.write(body)
 

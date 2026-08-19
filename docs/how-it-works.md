@@ -113,22 +113,24 @@ filesystem path.
 flowchart TD
     HUB["<b>The AI Hub</b><br/><i>one repo, all context</i>"]
 
-    subgraph ROOT["Hub root — governs everybody"]
-        RI["<b>context-index.md</b><br/>the root index<br/>declares the domains"]
+    subgraph ROOT["Hub root"]
+        RI["<b>context-index.md</b><br/><i>THE index — declares every file<br/>in the mesh, domains included</i>"]
         RP["product/<br/><i>business context, personas</i>"]
         RT["technical/<br/><i>architecture, standards</i>"]
         RG["process/ · governance/"]
-        RS[("staging/candidates/")]
+        RS[("<b>staging/candidates/</b><br/><i>THE staging tree —<br/>everything ingested lands here</i>")]
     end
 
-    subgraph DOMS["domains/ — OPTIONAL"]
+    subgraph DOMS["domains/ — OPTIONAL — context files only"]
         direction LR
-        D1["<b>domains/payments/</b><br/>context-index.md<br/>technical/ · product/<br/>staging/candidates/"]
-        D2["<b>domains/notify/</b><br/>context-index.md<br/>technical/<br/>staging/candidates/"]
+        D1["<b>domains/payments/</b><br/>technical/ · product/"]
+        D2["<b>domains/notify/</b><br/>technical/"]
     end
 
     HUB --> ROOT
     HUB --> DOMS
+    RI -.->|"declares<br/>domains/payments/technical/…"| DOMS
+    RS -.->|"promotes into"| DOMS
 
     CODE["Code<br/><i>a separate repo, or this same one</i>"]
     HUB -.->|"describes"| CODE
@@ -147,7 +149,16 @@ makes both answers visible from the path alone:
 | | **Everybody** (Hub root) | **One domain** (`domains/<name>/`) |
 |---|---|---|
 | **Decided** — canonical | `product/business-context.md` | `domains/payments/technical/system-behavior.md` |
-| **Not yet decided** — staging | `staging/candidates/` | `domains/payments/staging/candidates/` |
+| **Not yet decided** — staging | `staging/candidates/` | `staging/candidates/` — the same one |
+
+**Staging is centralized, and the index with it.** Every ingested fact lands in the one
+`staging/candidates/`, whichever domain it is about; the candidate's `target:` records where it
+will go. Likewise there is one `context-index.md`, at the Hub root, declaring domain files
+under their full path. A domain folder holds context files and nothing else.
+
+**The structure above is suggested, not required.** Folder names like `product/` and
+`technical/` are convention. **Any structure can be mapped in the index** — routing reads the
+index and only the index, so a file is reachable exactly when a row points at it.
 
 **A domain is a directory under `domains/`. A folder called `product/` at
 the root is the cross-cutting product tree; a folder called `product/` under

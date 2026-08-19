@@ -18,17 +18,28 @@ One repo holds all context, authored once and never mirrored. The Hub may be its
 may be the code repo — in a monorepo the Hub root *is* the repo root.
 
 ```
-context-index.md          the root index — routing reads this
+context-index.md          THE index — the only one. Routing reads this.
 product/                  cross-cutting product context
 technical/                cross-cutting technical context
 process/  governance/     how the team works; policy
-staging/candidates/       ingested, not yet decided
+staging/candidates/       THE staging tree — everything ingested lands here
+staging/inbox/            optional drop location for raw material
 domains/                  OPTIONAL — one folder per domain
   payments/
-    context-index.md      that domain's index
-    technical/  product/
-    staging/candidates/
+    technical/  product/  declared in the root index as domains/payments/…
 ```
+
+**This layout is a suggestion, not a requirement.** The folder names above are conventional,
+not enforced — `product/`, `technical/`, `process/` and `governance/` are simply where most
+teams put those things. **Any structure can be mapped in the index**, because the index is what
+routing reads; a file is reachable if and only if a row points at it. The two things that are
+fixed are the index's location (the Hub root) and the staging tree's shape (`candidates/` and
+`inbox/` beneath a configurable path — see [Staging](#staging)).
+
+**One index, one staging tree.** A domain holds context files and nothing else — no index of
+its own, no staging dir. Its files are declared in the root index under their full path
+(`domains/payments/technical/system-behavior.md`), which is also what makes two domains'
+identically-named files distinguishable.
 
 **Two questions decide where any file goes:**
 
@@ -37,9 +48,10 @@ domains/                  OPTIONAL — one folder per domain
 | **Scope** | Who does this govern? | *Cross-cutting* (Hub root) or *one domain* (`domains/<name>/`) |
 | **State** | Is it decided? | *Canonical* (decided, believed) or *staging* (proposed, not yet believed) |
 
-A domain folder uses **the same layout as the Hub root**, so a path means the same thing at
-either level. Whether `product/business-context.md` is cross-cutting or domain-scoped is
-answered by whether it sits at the root or inside a domain folder.
+A domain folder uses **the same internal layout as the Hub root** for its context folders, so a
+path means the same thing at either level. Whether `product/business-context.md` is
+cross-cutting or domain-scoped is answered by whether it sits at the root or inside a domain
+folder. Staging and the index are the exception: those exist only at the root.
 
 **A domain is exactly a directory under `domains/`.** Nothing else is one, whatever it contains.
 
@@ -211,7 +223,8 @@ normal in discovery.
 
 ## Staging
 
-Undecided material, at the root and in each domain:
+Undecided material. **One tree, at the Hub root** — every ingested fact lands here regardless
+of which domain it is about, and its `target:` records where it will go:
 
 ```
 staging/candidates/       one file per ingested candidate
@@ -237,9 +250,10 @@ export CONTEXT_MESH_STAGING=_incoming        # -> _incoming/candidates/
 export CONTEXT_MESH_STAGING=docs/staging     # -> docs/staging/candidates/
 ```
 
-The path is relative to **each container**, so one setting covers the Hub root and every
-domain. With `docs/staging`, the root's tree is at `docs/staging/` and the payments domain's
-at `domains/payments/docs/staging/`.
+The path is relative to **the Hub root**, and there is exactly one staging tree for the whole
+mesh. With `docs/staging`, the mesh's staging is at `docs/staging/` and nowhere else — a fact
+about payments still lands in that one `candidates/` folder, with its `target:` recording that
+it belongs to payments.
 
 It is set in **one** place and every script reads it — nothing else needs editing. The root
 index's Staging table documents the path for humans, so if you change one, change the other:
@@ -254,8 +268,13 @@ payments behavior belongs beside that behavior, where whoever reads it will see 
 
 ## The index is the routing input
 
-Every container — the Hub root and each domain — has a `context-index.md`. It is the only thing
-routing reads.
+**There is one `context-index.md`, at the Hub root.** It is the only thing routing reads, and it
+declares every file in the mesh — cross-cutting and domain-scoped alike. A domain's files
+appear under their full path:
+
+```markdown
+| [domains/payments/technical/system-behavior.md](domains/payments/technical/system-behavior.md) | Payment flows, retries, idempotency | changing a payment flow |
+```
 
 Each row needs two things a script cannot guess:
 
@@ -263,5 +282,13 @@ Each row needs two things a script cannot guess:
 - **When to load it** — the condition that makes it relevant. This is the part that makes
   progressive disclosure work.
 
-The root index additionally declares which domains exist and records the mesh's vocabulary
-version.
+The index also declares which domains exist and records the mesh's vocabulary version.
+
+**Why one index rather than one per domain.** Domains had their own indexes until v0.17.0. The
+split was removed because neither claimed benefit was real: routing reads *every* index on
+every run, so splitting saved no context; and per-team ownership was never structural — it is
+`owned-by` metadata, which a folder boundary does not enforce. Meanwhile the costs were real:
+N indexes to keep valid, and N staging trees walked by two scripts that had to agree exactly or
+a claim went invisible to one of them. If per-team review is wanted later, it belongs in the
+*workflow* — a second gate after ingestion, or a domain-targeted ingestion run — not in the
+directory layout.

@@ -31,9 +31,10 @@ to receive; it reports gaps, it does not fix them mid-run.
 
 ## The one rule that matters most
 
-**Route using the indexes only.** Read the Hub root's and each domain's `context-index.md` and route against the
-file descriptions and load conditions written there. **Do not open the context files to
-decide where a chunk goes.**
+**Route using the index only.** Read the Hub root's `context-index.md` — the one index, which
+declares every file in the mesh including each domain's — and route against the file
+descriptions and load conditions written there. **Do not open the context files to decide where
+a chunk goes.**
 
 This is not a performance shortcut, it is the design under test. The index is the
 progressive-disclosure contract the whole project rests on; if a chunk cannot be routed from
@@ -54,7 +55,7 @@ isn't already there (stage 3.5). This is bounded and it does not weaken the rule
 | **When** | Before a target exists | After the folder is fixed | After the target is fixed |
 | **Reads** | Indexes only | Members of the collection routing chose (frontmatter first) | The file routing chose, **plus unpromoted staging** |
 | **Asks** | What is this file *about*? | *Which* member is this about? | What does the mesh already *say*? |
-| **Cost** | N domains → 1 index each | folder-bounded, warns at 40 | ≤ N chunks (canonical) + the staged pool |
+| **Cost** | one index, however many domains | folder-bounded, warns at 40 | ≤ N chunks (canonical) + the staged pool |
 
 **Member resolution (stage 3.4) only runs when routing chose a collection** — a target ending
 in `/`. Routing picks the *folder* from the index; it cannot pick the member, because a
