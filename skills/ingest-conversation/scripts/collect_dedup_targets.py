@@ -277,6 +277,11 @@ def main():
 
     placements_path, hub_root = args
 
+    # Resolve where staging lives for THIS Hub before anything looks for it: env var, then
+    # `<hub>/.context-mesh`, then the default. Must happen after the root is known and before
+    # the first staging lookup.
+    staging_config.configure(hub_root)
+
     try:
         with open(placements_path) as fh:
             data = json.load(fh)
@@ -416,7 +421,13 @@ def main():
         # would otherwise read as an empty folder and resolve every chunk to CREATE.
         for path, err in coll_unreadable:
             print(f"error: cannot read collection member: {path} ({err})", file=sys.stderr)
-        if unresolvable or unreadable or coll_unreadable:
+        # A detected misconfiguration exits NON-ZERO, on the same footing as an unreadable
+        # staging dir. The warning alone was not enough: it goes to stderr and the script
+        # exited 0, so a piped or agent-driven run that only reads stdout proceeded to dedup
+        # against an empty pool and shipped duplicates. Note this fires only when misplaced
+        # candidates were actually FOUND -- a genuinely fresh mesh still exits 0, because
+        # making "no candidates" an error would be the fail-CLOSED mirror of the same bug.
+        if unresolvable or unreadable or coll_unreadable or misconfig:
             return 1
         return 0
 
@@ -533,7 +544,9 @@ def main():
         print("empty folder -- so every chunk would CREATE, silently duplicating a member")
         print("that is already there. Fix access before writing anything.")
 
-    if unresolvable or unreadable or coll_unreadable:
+    # Same non-zero exit as the plain path: a detected misconfiguration means the staged pool
+    # is empty because nothing looked in the right place, not because there is nothing there.
+    if unresolvable or unreadable or coll_unreadable or misconfig:
         return 1
 
     return 0

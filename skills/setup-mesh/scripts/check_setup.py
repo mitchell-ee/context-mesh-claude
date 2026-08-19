@@ -188,6 +188,11 @@ def main():
         print(f"error: not a directory: {repo}", file=sys.stderr)
         return 2
 
+    # This script may be pointed at the Hub root OR at a domain folder inside it, so the
+    # `.context-mesh` file can sit above the directory given. `configure` is called with the
+    # nearest ancestor that has one, falling back to `repo` itself.
+    staging_config.configure(staging_config.find_hub_root(repo))
+
     problems, notes = [], []
 
     # 1. The index.

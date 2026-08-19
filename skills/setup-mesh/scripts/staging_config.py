@@ -65,18 +65,11 @@ import os
 # of this module compared `os.path.basename(parent) == STAGING_DIR`, which is true only when
 # staging is a single segment -- `docs/staging` made every walk find nothing, and the
 # misconfiguration warning then confidently advised setting the variable to the wrong value.
-STAGING_DIR = os.environ.get("CONTEXT_MESH_STAGING", "staging").strip("/") or "staging"
+DEFAULT_STAGING = "staging"
 
-# The configured location as a tuple of path segments, which is what every comparison uses.
-# Normalizes separators so a Windows-style value still compares correctly, and drops `.` and
-# empty segments so `./docs//staging` means what it looks like.
-STAGING_SEGMENTS = tuple(
-    s for s in STAGING_DIR.replace("\\", "/").split("/") if s and s != "."
-) or ("staging",)
-
-# Re-derived from the segments so the canonical form is what gets printed and joined -- a
-# value like `./docs//staging/` must not reach an index or an error message verbatim.
-STAGING_DIR = "/".join(STAGING_SEGMENTS)
+# The file a Hub can carry to declare its own staging location, so the setting travels with
+# the repo instead of living in one person's shell. See `configure()`.
+CONFIG_FILE = ".context-mesh"
 
 # Fixed names beneath the staging directory. Not configurable -- see the module docstring.
 CANDIDATES_DIR = "candidates"
@@ -85,6 +78,116 @@ INBOX_DIR = "inbox"
 # The environment variable a human sets, named here so error text and generated index prose
 # never hardcode it in a second place.
 ENV_VAR = "CONTEXT_MESH_STAGING"
+
+STAGING_DIR = DEFAULT_STAGING
+STAGING_SEGMENTS = (DEFAULT_STAGING,)
+
+# Where the current value came from, for error messages that would otherwise send a reader to
+# fix the wrong thing -- "set the variable" is bad advice when a config file is overriding it.
+STAGING_SOURCE = "default"
+
+
+def _set_staging(value, source):
+    """Set the module's staging location from a raw string. Returns the canonical form.
+
+    Everything downstream compares SEGMENT TUPLES, so this is where a raw value becomes one.
+    Normalizes separators (a Windows-style value still compares correctly) and drops `.` and
+    empty segments, so `./docs//staging` means what it looks like. `STAGING_DIR` is re-derived
+    from the parsed tuple rather than kept as typed -- a sloppy value must not reach an index
+    row or an error message verbatim.
+    """
+    global STAGING_DIR, STAGING_SEGMENTS, STAGING_SOURCE
+    segs = tuple(s for s in str(value).replace("\\", "/").split("/") if s and s != ".")
+    if not segs:
+        segs = (DEFAULT_STAGING,)
+    STAGING_SEGMENTS = segs
+    STAGING_DIR = "/".join(segs)
+    STAGING_SOURCE = source
+    return STAGING_DIR
+
+
+def read_config_file(hub_root):
+    """The staging path declared in `<hub>/.context-mesh`, or None.
+
+    Deliberately not YAML. This file has one job and adding a parser dependency to read one
+    key would be the wrong trade -- the format is `key: value`, one per line, `#` comments.
+    An unreadable or malformed file returns None rather than raising: the caller falls back to
+    the default, and a mesh whose staging is genuinely at `staging/` keeps working.
+
+    Unknown keys are ignored, so this file can grow later without old plugin versions choking.
+    """
+    path = os.path.join(hub_root, CONFIG_FILE)
+    try:
+        with open(path) as fh:
+            text = fh.read()
+    except OSError:
+        return None
+
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        if key.strip() == "staging":
+            value = value.strip().strip('"').strip("'")
+            return value or None
+    return None
+
+
+def find_hub_root(start):
+    """The nearest ancestor of `start` (including itself) carrying a `.context-mesh` file.
+
+    Some entry points are pointed at a domain folder rather than the Hub root, and the config
+    file lives at the root. Walking up finds it; if nothing is found, `start` is returned
+    unchanged and resolution falls through to the env var or the default -- which is exactly
+    the behaviour of a Hub that has no config file at all.
+
+    Stops at the filesystem root. Does NOT look for `.git` or `context-index.md`: a Hub may be
+    a subdirectory of a repo, and an index may not exist yet during setup.
+    """
+    cur = os.path.abspath(start)
+    while True:
+        if os.path.isfile(os.path.join(cur, CONFIG_FILE)):
+            return cur
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            return start
+        cur = parent
+
+
+def configure(hub_root):
+    """Resolve where staging lives for THIS Hub. Call once, after the root is known.
+
+    Resolution order, highest first:
+
+        1. CONTEXT_MESH_STAGING    -- the environment, for a one-off or a CI override
+        2. <hub>/.context-mesh     -- the Hub's own declaration, committed to the repo
+        3. `staging`               -- the default
+
+    **Why a file and not just the variable.** An environment variable is per-shell, so the
+    setting had to be re-exported in every terminal, every CI job, and every agent run that
+    touched the mesh. Forgetting it did not fail loudly: the staged pool came back empty,
+    which is indistinguishable from a mesh that has never ingested anything, and dedup then
+    ran against nothing and shipped duplicates. A file in the Hub travels with the repo, so
+    cloning it is enough -- no tooling to install, and it works in CI and headless runs where
+    a `.envrc` would not.
+
+    Called once per process, after the Hub root is parsed from argv -- not at import, because
+    the file lives AT the Hub root and nothing knows where that is until then. Re-reading per
+    call would let the path change mid-run, and two walks that disagree about where candidates
+    live make a claim invisible to one of them.
+    """
+    env = os.environ.get(ENV_VAR)
+    if env and env.strip():
+        return _set_staging(env.strip(), "environment")
+
+    from_file = read_config_file(hub_root)
+    if from_file:
+        return _set_staging(from_file, CONFIG_FILE)
+
+    return _set_staging(DEFAULT_STAGING, "default")
 
 
 def _segments(p):
@@ -270,10 +373,14 @@ def find_misplaced_candidates(hub_root):
 def misconfig_message(misplaced):
     """The warning text for `find_misplaced_candidates` output. One wording, both scripts.
 
-    Two remedies, because there are two causes and only one of them is an env-var fix. A
-    leftover per-domain staging tree cannot be reached by pointing the variable at it -- the
-    candidates must move to the Hub root -- so suggesting an `export` there would be advice
-    that silently does nothing.
+    Two remedies, because there are two causes and only one of them is a configuration fix. A
+    leftover per-domain staging tree cannot be reached by pointing the config at it -- the
+    candidates must move to the Hub root -- so suggesting a setting there would be advice that
+    silently does nothing.
+
+    The suggested fix names the source that is actually in effect. Telling someone to export a
+    variable when a committed `.context-mesh` is overriding their shell sends them to edit the
+    wrong thing and watch nothing change.
     """
     domain_hits = sorted({inf for _, inf in misplaced if inf.startswith("domain: ")})
     path_hits = sorted({inf for _, inf in misplaced if not inf.startswith("domain: ")})
@@ -286,10 +393,22 @@ def misconfig_message(misplaced):
     if path_hits:
         lines += [
             f"  Found under: {', '.join(path_hits)}.",
-            f"  Staging is configured as `{STAGING_DIR}/` via {ENV_VAR}. If this mesh keeps "
-            f"its staging tree somewhere else, set it:",
-            f"      export {ENV_VAR}={path_hits[0]}",
+            f"  Staging resolves to `{STAGING_DIR}/` (from: {STAGING_SOURCE}). If this mesh "
+            f"keeps its staging tree somewhere else, declare it:",
         ]
+        if STAGING_SOURCE == "environment":
+            lines += [
+                f"      export {ENV_VAR}={path_hits[0]}",
+                f"  -- or drop the variable and commit it to `{CONFIG_FILE}` instead, which "
+                f"travels with the repo:",
+                f"      staging: {path_hits[0]}",
+            ]
+        else:
+            lines += [
+                f"  In `{CONFIG_FILE}` at the Hub root:",
+                f"      staging: {path_hits[0]}",
+                f"  -- or, for a one-off:  export {ENV_VAR}={path_hits[0]}",
+            ]
 
     if domain_hits:
         names = ", ".join(h.split("domain: ", 1)[1] for h in domain_hits)

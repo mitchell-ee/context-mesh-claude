@@ -109,19 +109,28 @@ splits what's missing into the only two categories that matter:
 (`staging/candidates/`) and a stub `context-index.md` **with no entries**. It will never
 create `technical/repo-overview.md`, and never add a row to the index.
 
-**Staging need not live at `staging/`.** If the team keeps proposed material elsewhere, set
-`CONTEXT_MESH_STAGING` before running anything — the whole tree moves together, keeping
-`candidates/` and `inbox/` beneath it, and every script in all three skills reads that one
-variable. The value is a **path** and may be nested to any depth:
+**Staging need not live at `staging/`.** The whole tree moves together, keeping `candidates/`
+and `inbox/` beneath it. The value is a **path**, relative to the Hub root, and may be nested
+to any depth. Two ways to set it, resolved **environment → file → default**:
 
 ```bash
-export CONTEXT_MESH_STAGING=_incoming        # -> _incoming/candidates/
-export CONTEXT_MESH_STAGING=docs/staging     # -> docs/staging/candidates/
+export CONTEXT_MESH_STAGING=docs/staging     # a one-off, or CI
 ```
 
-It is interpreted **relative to each container**, so one setting covers the Hub root and every
-domain: `docs/staging` puts the root's tree at `docs/staging/` and payments' at
-`domains/payments/docs/staging/`.
+```
+# .context-mesh at the Hub root — the durable form, committed with the repo
+staging: docs/staging
+```
+
+**Scaffolding captures it.** If `CONTEXT_MESH_STAGING` is set when you scaffold the root and it
+is not the default, `scaffold_domain.py` writes `.context-mesh` for you — so the setting stops
+being one person's shell state at the moment the mesh is created. A default Hub gets no file.
+
+**Recommend the file when the path is non-default.** An environment variable has to be
+re-exported in every terminal, CI job, and agent run; forgetting it makes the staged pool come
+back empty, which looks exactly like a mesh that has never ingested anything. The tooling exits
+non-zero when it detects that, but a setting that cannot be forgotten is better than one that
+is caught.
 
 The scaffolded index documents the path and carries a note to keep the two in step. **If they
 drift, the tooling says so** rather than reporting an empty staging tree as normal — a

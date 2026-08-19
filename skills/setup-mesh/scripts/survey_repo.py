@@ -572,6 +572,10 @@ def main():
         print(f"error: not a directory: {root}", file=sys.stderr)
         return 2
 
+    # Before the walk, so staging is pruned by the path this Hub actually uses. `walk_markdown`
+    # calls `is_staging_path` per directory, which reads the resolved value.
+    staging_config.configure(staging_config.find_hub_root(root))
+
     s = survey(root)
     if "--json" in argv:
         print(json.dumps(s, indent=2))

@@ -46,6 +46,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import check_setup  # noqa: E402  (deliberate: the survey is a layer over the checker)
 import scaffold_domain  # noqa: E402  (for what it actually creates -- never a second copy)
+import staging_config  # noqa: E402  (one definition of where staging lives)
 
 INDEX = check_setup.INDEX
 DOMAINS_DIR = scaffold_domain.DOMAINS_DIR
@@ -426,6 +427,15 @@ def main():
     if not os.path.isdir(hub_root):
         print(f"error: not a directory: {hub_root}", file=sys.stderr)
         return 2
+
+    # This survey reports which containers `scaffold_domain.py` would create, by reading its
+    # ROOT_DIRS -- a constant computed at import from the DEFAULT staging path. Without
+    # resolving this Hub's config first, a mesh whose staging is at `docs/staging` would be
+    # told it is missing `staging/candidates/`, a directory it correctly does not have. That
+    # is the fail-CLOSED shape: a correct mesh reported broken, with no way to clear it.
+    staging_config.configure(hub_root)
+    scaffold_domain.ROOT_DIRS = [staging_config.candidates_dir(),
+                                 staging_config.inbox_dir()]
 
     if as_manifest:
         groups = manifest(hub_root)

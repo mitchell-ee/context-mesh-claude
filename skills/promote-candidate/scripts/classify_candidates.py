@@ -244,6 +244,11 @@ def main():
     hub = args[0]
     rows = []
 
+    # Resolve where staging lives for THIS Hub before looking for it: env var, then
+    # `<hub>/.context-mesh`, then the default. The pool promotion offers must equal the pool
+    # dedup compared against, so both scripts resolve it the same way, from the same module.
+    staging_config.configure(hub)
+
     # ONE staging tree (v0.17.0), so there is one path here rather than two. `--mesh` used to
     # select "walk every domain's staging" and is now a no-op, accepted so existing scripts,
     # docs, and muscle memory keep working rather than erroring on an unknown flag.

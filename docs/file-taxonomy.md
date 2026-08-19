@@ -241,14 +241,35 @@ raised it, when.
 **`staging/inbox/` is a drop location, not a collection.** No naming pattern, nothing routes to
 it. Processed items move to `staging/inbox/processed/`.
 
-**The staging tree can live anywhere.** Set `CONTEXT_MESH_STAGING` and the whole tree moves
-together, keeping `candidates/` and `inbox/` beneath it. The value is a **path**, so it may be
-nested to any depth:
+**The staging tree can live anywhere.** The whole tree moves together, keeping `candidates/`
+and `inbox/` beneath it. The value is a **path**, so it may be nested to any depth.
+
+**Declare it in `.context-mesh` at the Hub root** — a two-line file, committed with the repo:
+
+```
+# .context-mesh
+staging: docs/staging
+```
+
+That is the durable form: it travels with the repo, so anyone who clones the Hub gets the right
+layout with nothing to install and nothing to remember — including CI and headless agent runs.
+`setup-mesh` writes this file for you when staging is anywhere other than the default.
+
+**`CONTEXT_MESH_STAGING` overrides it**, for a one-off or a CI override:
 
 ```bash
-export CONTEXT_MESH_STAGING=_incoming        # -> _incoming/candidates/
-export CONTEXT_MESH_STAGING=docs/staging     # -> docs/staging/candidates/
+export CONTEXT_MESH_STAGING=docs/staging
 ```
+
+Resolution order is **environment → `.context-mesh` → `staging/`**.
+
+**Prefer the file.** An environment variable is per-shell, so it has to be re-exported in every
+terminal, CI job, and agent run. Forgetting it does not fail obviously: the staged pool comes
+back empty, which looks exactly like a mesh that has never ingested anything. The tooling now
+detects that specific case and exits non-zero rather than quietly deduping against nothing —
+but a setting that cannot be forgotten is better than one that is caught. If your team already
+uses [direnv](https://direnv.net/), an `.envrc` exporting the variable works too; it just does
+not help anyone who has not installed it.
 
 The path is relative to **the Hub root**, and there is exactly one staging tree for the whole
 mesh. With `docs/staging`, the mesh's staging is at `docs/staging/` and nowhere else — a fact

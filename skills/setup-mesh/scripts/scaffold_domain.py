@@ -216,6 +216,30 @@ def scaffold(path, name, is_root, dry_run=False):
     if not is_root:
         return created, skipped
 
+    # CAPTURE a non-default staging path into the repo, so it stops being per-shell state.
+    # The variable has to be re-exported in every terminal, CI job, and agent run; forgetting
+    # it made the staged pool come back empty, which is indistinguishable from a mesh that has
+    # never ingested. Writing it here means the next person to clone the Hub gets the right
+    # layout with nothing to install and nothing to remember.
+    #
+    # Only when it is NOT the default: a Hub at plain `staging/` needs no file, and creating
+    # one everywhere would be clutter that most meshes never edit. Never overwritten -- if the
+    # file exists it is the team's, and it is what produced this value in the first place.
+    cfg_path = os.path.join(path, staging_config.CONFIG_FILE)
+    if staging_config.STAGING_DIR != staging_config.DEFAULT_STAGING:
+        if os.path.isfile(cfg_path):
+            skipped.append(staging_config.CONFIG_FILE)
+        else:
+            created.append(staging_config.CONFIG_FILE)
+            if not dry_run:
+                with open(cfg_path, "w") as fh:
+                    fh.write(
+                        "# Where this mesh keeps its staging tree, relative to the Hub root.\n"
+                        "# Committed so the setting travels with the repo instead of living\n"
+                        f"# in one person's shell. {staging_config.ENV_VAR} overrides it.\n"
+                        f"staging: {staging_config.STAGING_DIR}\n"
+                    )
+
     index_path = os.path.join(path, INDEX)
     if os.path.isfile(index_path):
         # NEVER rewrite an existing index. It is authored -- the team's entries, load
@@ -249,6 +273,15 @@ def main():
     if not os.path.isdir(hub_root):
         print(f"error: not a directory: {hub_root}", file=sys.stderr)
         return 2
+
+    # Resolve staging for THIS Hub, then rebuild ROOT_DIRS from the resolved value. The
+    # constant is computed at import, before any Hub root is known, so it holds the DEFAULT
+    # path until this runs -- scaffolding a Hub whose `.context-mesh` says `docs/staging`
+    # would otherwise create `staging/` and leave the index pointing at a folder that does
+    # not exist.
+    staging_config.configure(hub_root)
+    global ROOT_DIRS
+    ROOT_DIRS = [staging_config.candidates_dir(), staging_config.inbox_dir()]
 
     # The Hub root is checked and stood up on EVERY run, single-domain or many. It is just
     # another idempotent step that happens to run first.
