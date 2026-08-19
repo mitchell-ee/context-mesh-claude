@@ -228,6 +228,19 @@ raised it, when.
 **`staging/inbox/` is a drop location, not a collection.** No naming pattern, nothing routes to
 it. Processed items move to `staging/inbox/processed/`.
 
+**The staging tree can live somewhere else.** Set `CONTEXT_MESH_STAGING` and the whole tree
+moves together, keeping `candidates/` and `inbox/` beneath it:
+
+```bash
+export CONTEXT_MESH_STAGING=_incoming     # -> _incoming/candidates/, _incoming/inbox/
+```
+
+It is set in **one** place and every script reads it — nothing else needs editing. The root
+index's Staging table documents the path for humans, so if you change one, change the other:
+the table is prose, the variable is what the tooling obeys. Get them out of step and the index
+describes a folder nothing reads or writes. The scripts detect that specific mismatch and name
+it, rather than reporting an empty staging tree as normal.
+
 **Open questions live in the file they are about**, not in a separate list. A question about
 payments behavior belongs beside that behavior, where whoever reads it will see it.
 

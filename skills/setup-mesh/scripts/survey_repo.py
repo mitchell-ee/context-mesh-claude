@@ -49,6 +49,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import check_setup  # noqa: E402  (one definition of what an index is, never a second)
+import staging_config  # noqa: E402  (likewise, for where staging lives)
 
 INDEX = check_setup.INDEX
 
@@ -57,7 +58,11 @@ INDEX = check_setup.INDEX
 # entry here HIDES real context, so it stays boring.
 SKIP_DIRS = {
     ".git", ".github", "node_modules", "venv", ".venv", "__pycache__", "dist", "build",
-    "target", "vendor", ".idea", ".vscode", "coverage", ".next", ".cache", "staging",
+    "target", "vendor", ".idea", ".vscode", "coverage", ".next", ".cache",
+    # Staging is proposed material, not context -- and it moves with the config, so this is
+    # read from the shared module rather than spelled out. A relocated staging tree that was
+    # still skipped by the literal name would have its candidates surveyed as context.
+    staging_config.STAGING_DIR,
     # Tooling that DESCRIBES a mesh rather than being one. Without these, running this
     # against a repo that packages context-mesh itself proposed `skills/setup-mesh/SKILL.md`
     # as product context -- confidently, and wrongly. A mesh's own machinery is not context
@@ -78,11 +83,54 @@ SKIP_FILES = {"LICENSE.md", "CHANGELOG.md", "CODE_OF_CONDUCT.md", "SECURITY.md",
 # collections: their layout, IDs, and parent chain are fixed, so they need no declaration.
 KNOWN_STRUCTURES = {"opportunity-solution-tree", "iterations", "decisions"}
 
-# A collection is many files of one kind in one folder. Below this, a folder is more likely to
-# be two unrelated documents that happen to share a directory, and proposing a collection row
-# for it would invent a "kind of context" the team never had. Two is the honest floor for
-# "many", and the human confirms either way.
+# A collection is many files of ONE KIND in one folder. Count alone does not establish that,
+# and treating it as if it did was the bug this section exists to prevent: the test used to be
+# `len(files) >= 2`, so any directory holding two markdown files became a proposed collection.
+# Run against a normal repo, a `docs/` holding architecture.md, deployment.md, glossary.md and
+# security-model.md -- four mutually exclusive singletons -- was proposed as a collection,
+# which claims they are the same kind and that a fifth of them is coming. Proximity is not
+# sameness. Two is still the floor for "many", but it is now necessary rather than sufficient.
 COLLECTION_MIN = 2
+
+# Folder names that ARE a collection kind, near enough to say so. This is the "obviously a
+# collection of a type we recognize" test, and it is the strongest signal available without
+# reading a single file. Kept to kinds that are genuinely many-of-one-thing by nature -- a
+# folder called `docs` or `notes` is a location, not a kind, and must never appear here.
+COLLECTION_DIR_NAMES = {
+    "personas", "adr", "adrs", "decisions", "decision-records", "rfcs", "rfc",
+    "journeys", "journey-maps", "runbooks", "postmortems", "post-mortems",
+    "interviews", "playbooks", "policies", "profiles",
+}
+
+# Filenames that name a SINGLETON kind -- one of this thing exists, and a second would be a
+# contradiction rather than a sibling. Their presence is positive evidence AGAINST the folder
+# being a collection: a directory holding `architecture.md` is a place documents live, not a
+# set of one kind. This is the inverse signal, and it outranks every other -- a folder with a
+# recognized singleton in it is never proposed as a collection, whatever else it contains.
+SINGLETON_STEMS = {
+    "architecture", "glossary", "deployment", "security-model", "security", "roadmap",
+    "onboarding", "troubleshooting", "faq", "overview", "vision", "charter", "readme",
+    "coding-standards", "style-guide", "conventions", "ways-of-working", "process",
+    "business-context", "product-overview", "system-design", "design-principles",
+    "getting-started", "installation", "configuration", "changelog", "index",
+}
+
+# Member-name shapes that mean "these are siblings of one kind": `001-slug.md` and
+# `2026-08-19-slug.md`. These are the two ordinal/dated patterns the taxonomy already names.
+#
+# NOTE, because it brushes against a rule: decisions.md section 8 says member naming patterns
+# are OPAQUE -- used only to GENERATE a new member's name, never parsed to read meaning back
+# out of an existing filename. That rule governs routing and promotion, where parsing a name
+# would make the pattern into schema. This is neither: nothing here extracts data from a name
+# or acts on it. It observes that several filenames share a shape, reports that shape to a
+# human as its reason, and lets them decide. The pattern is evidence presented, not schema read.
+ORDINAL_RE = re.compile(r"^\d{3,4}[-_]")
+DATED_RE = re.compile(r"^\d{4}-\d{2}-\d{2}[-_]")
+
+# What fraction of a folder's members must share a naming shape before that shape counts as a
+# signal. Not 1.0: a real ADR folder acquires a README or a template, and demanding purity
+# would drop the folder over one stray file.
+PATTERN_MIN_SHARE = 0.6
 
 # The default manifest, reduced to the GAPS WORTH NAMING. Each entry is the highest-level
 # artifact that covers its area -- deliberately not the full manifest, which runs to ~25 files
@@ -169,13 +217,111 @@ def already_declared(root):
     return declared
 
 
+def stem(path):
+    """A filename reduced to its comparable core: no directory, no extension, `_` as `-`."""
+    base = os.path.basename(path)
+    if base.endswith(".md"):
+        base = base[:-3]
+    return base.lower().replace("_", "-")
+
+
+def pattern_share(files):
+    """The dominant member-name shape in a folder, and what fraction shares it.
+
+    Returns (label, share). Reports the STRONGER shape when both appear, since a folder mixing
+    `001-x.md` and `2026-01-01-y.md` is homogeneous under neither on its own but is plainly not
+    a set of unrelated documents either.
+    """
+    if not files:
+        return None, 0.0
+    names = [os.path.basename(p) for p in files]
+
+    # Test DATED first and let it win outright. `2026-01-05-standup.md` matches ORDINAL_RE too
+    # -- `^\d{3,4}[-_]` accepts the four-digit year -- so scoring them independently and taking
+    # the max reported a folder of dated meeting notes as "numbered `NNN-{slug}.md`". The
+    # verdict was right and the REASON was wrong, which in a report whose whole purpose is to
+    # show its reasoning is the more damaging half. Dated is the more specific pattern: every
+    # dated name is an ordinal match, so it must be given the chance to claim its files first.
+    dated = sum(1 for n in names if DATED_RE.match(n))
+    if dated:
+        return "dated `{date}-{slug}.md`", dated / len(names)
+
+    ordinal = sum(1 for n in names if ORDINAL_RE.match(n))
+    if ordinal:
+        return "numbered `NNN-{slug}.md`", ordinal / len(names)
+
+    return None, 0.0
+
+
+def collection_evidence(d, files):
+    """Why this folder looks like a collection -- or None if it does not.
+
+    Positive recognition, not proximity. The old rule was `len(files) >= 2`, which made every
+    directory with two markdown files a collection. This asks what the files ARE.
+
+    Order matters. The singleton veto runs FIRST and outranks everything, because a recognized
+    singleton is positive evidence the folder is a location rather than a kind: `architecture.md`
+    is one-of-one by nature, so its neighbours are its neighbours, not its siblings.
+    """
+    if len(files) < COLLECTION_MIN or not d:
+        return None
+
+    # The veto. A folder holding a recognized singleton is a grab-bag, whatever else is true.
+    vetoes = sorted({stem(f) for f in files} & SINGLETON_STEMS)
+    if vetoes:
+        return None
+
+    # Strongest signal: the folder is NAMED as a kind we recognize.
+    #
+    # Strip the decorations teams put around the kind rather than demanding an exact match:
+    # `Personas_Dir`, `ADRs/`, `docs-decisions` all name a kind we know, and matching only the
+    # bare word missed every one of them. Confirmed on a fixture -- `Personas_Dir/` produced
+    # nothing at all. The stripping is deliberately narrow (case, separators, a plural `s`, and
+    # a short list of noise words) because each thing removed is a chance to match a folder
+    # that never meant the kind at all.
+    leaf = os.path.basename(d).lower().replace("_", "-")
+    candidates = {leaf}
+    parts = [p for p in leaf.split("-") if p and p not in {"dir", "docs", "doc", "folder", "all"}]
+    if parts:
+        candidates.add("-".join(parts))
+        candidates.add(parts[-1])
+    for c in list(candidates):
+        if c.endswith("s"):
+            candidates.add(c[:-1])
+        else:
+            candidates.add(c + "s")
+
+    hit = candidates & COLLECTION_DIR_NAMES
+    if hit:
+        return (f"the folder name `{os.path.basename(d)}` names a kind "
+                "that is many-of-one by nature")
+
+    # Weaker but real: the members share a naming shape.
+    label, share = pattern_share(files)
+    if label and share >= PATTERN_MIN_SHARE:
+        pct = round(share * 100)
+        return f"{pct}% of members share a {label} naming shape"
+
+    return None
+
+
+def singleton_veto(files):
+    """The recognized-singleton filenames in a folder, if any. Used for the mixed-folder note."""
+    return sorted({stem(f) for f in files} & SINGLETON_STEMS)
+
+
 def classify(paths):
     """Sort found markdown into the three kinds of home.
 
-    Groups by parent directory, because that is the only signal available that does not
-    require reading the files: a directory holding several markdown files is what a collection
-    looks like on disk. This is a PROPOSAL for a human to confirm, never a determination --
-    which is the difference between this and the domain-detection heuristic v2.2 deleted.
+    Groups by parent directory, then asks of each group what its files ARE -- see
+    `collection_evidence`. A folder with no collection evidence yields SINGLETONS, one row per
+    file, which is the safe default: a wrong singleton row is one redundant line in an index,
+    while a wrong collection row claims a kind the team never had and tells future ingestion to
+    keep adding members to it.
+
+    Every output is a PROPOSAL for a human to confirm, never a determination -- which is the
+    difference between this and the domain-detection heuristic v2.2 deleted. The evidence is
+    reported alongside each proposal so the human judges the reason, not just the verdict.
     """
     by_dir = {}
     for p in paths:
@@ -191,12 +337,57 @@ def classify(paths):
         segments = set(d.split("/"))
         if segments & KNOWN_STRUCTURES:
             known.append({"dir": d + "/", "count": len(files)})
-        elif len(files) >= COLLECTION_MIN and d:
+            continue
+
+        why = collection_evidence(d, files)
+        if why:
             collections.append({"dir": d + "/", "count": len(files),
-                                "members": sorted(files)})
+                                "members": sorted(files), "why": why})
         else:
             singletons.extend(sorted(files))
     return known, collections, sorted(singletons)
+
+
+def find_mixed(by_dir, collections):
+    """Folders where single documents and a set-of-one-kind are tangled together.
+
+    Two shapes, and the second was missed on the first pass. Both are reported as OBSERVATIONS,
+    never demands -- the survey cannot tell which reading the team wants, so it names the
+    situation, explains the consequence, and leaves the call to a human.
+
+      PARENT  a folder holding individual documents that also PARENTS a collection.
+              `docs/` with architecture.md and glossary.md, plus `docs/adr/` underneath.
+
+      SPOILED a folder that would have been proposed as a collection, but holds a recognized
+              singleton, so the veto suppressed it. `rfcs/` holding 0001-thing.md,
+              0002-other.md and architecture.md. This is the case the veto exists for and it
+              was going out SILENTLY -- three unexplained singleton rows, with the near-miss
+              and its one-file cause invisible. A veto whose reason is never surfaced looks
+              indistinguishable from the survey simply not recognizing the folder.
+    """
+    collection_dirs = {c["dir"].rstrip("/") for c in collections}
+    mixed = []
+    for d, files in sorted(by_dir.items()):
+        if not d or d in collection_dirs:
+            continue
+        vetoes = singleton_veto(files)
+        if not vetoes:
+            continue
+
+        nested = sorted(cd + "/" for cd in collection_dirs
+                        if cd.startswith(d + "/") and cd != d)
+        if nested:
+            mixed.append({"dir": d + "/", "kind": "parent",
+                          "singletons": vetoes, "collections": nested})
+            continue
+
+        # Would this have been a collection without the singleton(s) in it?
+        rest = [f for f in files if stem(f) not in SINGLETON_STEMS]
+        why = collection_evidence(d, rest)
+        if why:
+            mixed.append({"dir": d + "/", "kind": "spoiled",
+                          "singletons": vetoes, "collections": [], "why": why})
+    return mixed
 
 
 def find_gaps(paths):
@@ -231,6 +422,11 @@ def survey(root):
     undeclared = [p for p in paths if p not in declared]
 
     known, collections, singletons = classify(undeclared)
+
+    by_dir = {}
+    for p in undeclared:
+        by_dir.setdefault(os.path.dirname(p), []).append(p)
+
     return {
         "root": root,
         "has_index": os.path.isfile(os.path.join(root, INDEX)),
@@ -239,6 +435,7 @@ def survey(root):
         "known_structures": known,
         "collections": collections,
         "singletons": singletons,
+        "mixed": find_mixed(by_dir, collections),
         "gaps": find_gaps(paths),
         "walk_errors": walk_errors,
     }
@@ -277,19 +474,54 @@ def report(s):
         print("PROPOSED COLLECTIONS -- many files of one kind; ONE index row covers the folder.")
         for c in s["collections"]:
             print(f"  {c['dir']:44} {c['count']} file(s)")
+            print(f"      why: {c['why']}")
             for m in c["members"][:3]:
                 print(f"      {os.path.basename(m)}")
             if c["count"] > 3:
                 print(f"      ... and {c['count'] - 3} more")
         print()
-        print("  Confirm each: is this really one KIND of context, or unrelated documents")
-        print("  that share a folder? A collection row claims they are the same kind.")
+        print("  What a collection row means, so you can judge these:")
+        print("    - It says these files are all the SAME KIND, and more will arrive.")
+        print("    - ONE row covers the whole folder, so the tenth member is not an index edit.")
+        print("    - Ingestion may add members to it later, or modify an existing one.")
+        print("  If a folder is really unrelated documents that share a directory, say so and")
+        print("  take the singleton rows instead -- one row each, listed individually.")
         print()
 
     if s["singletons"]:
         print("PROPOSED SINGLETONS -- one file, one row each.")
         for p in s["singletons"]:
             print(f"  {p}")
+        print()
+        print("  Anything here that is really a set of one kind -- and should grow -- can be")
+        print("  declared as a collection instead. This survey only proposes a collection when")
+        print("  the folder name or the member names make the kind obvious, so it under-calls")
+        print("  on purpose. You know your material better than the filenames do.")
+        print()
+
+    if s["mixed"]:
+        print("MIXED FOLDERS -- worth a look, not an error.")
+        for m in s["mixed"]:
+            print(f"  {m['dir']}")
+            if m["kind"] == "parent":
+                print(f"      holds single documents: {', '.join(m['singletons'])}")
+                print(f"      and also collection(s): {', '.join(m['collections'])}")
+                print("      -> both a home for documents and a parent of a set. A collection")
+                print("         row covers a folder, so a set nested inside a general-purpose")
+                print("         folder can later read as though the PARENT were the collection.")
+                print("         Moving the set somewhere of its own removes the ambiguity.")
+            else:
+                print(f"      would be a collection -- {m['why']}")
+                print(f"      but also holds: {', '.join(m['singletons'])}")
+                print("      -> so it was NOT proposed as a collection, and its files are")
+                print("         listed individually above. Moving that one file out would make")
+                print("         this a clean collection; so would leaving it and declaring")
+                print("         nothing. Both are legitimate.")
+        print()
+        print("  Nothing here is broken, and neither shape is wrong -- these are flagged")
+        print("  because the mesh represents them differently, and you are the one who knows")
+        print("  which reading you meant. Leaving any of them exactly as they are is a fine")
+        print("  answer; the survey has no opinion it is willing to act on.")
         print()
 
     if not s["known_structures"] and not s["collections"] and not s["singletons"]:

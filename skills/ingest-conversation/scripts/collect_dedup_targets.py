@@ -52,6 +52,19 @@ import os
 import re
 import sys
 
+# One definition of where staging lives, shared across all three skills. Resolved via
+# CLAUDE_PLUGIN_ROOT when the plugin is installed, and via a relative path when these scripts
+# are run straight out of a checkout -- both must work, because the second is how they are
+# tested. A copy of the path logic here instead of an import is exactly the drift that put two
+# definitions of INDEX in this codebase.
+_SETUP_SCRIPTS = os.path.join(
+    os.environ.get("CLAUDE_PLUGIN_ROOT",
+                   os.path.dirname(os.path.dirname(os.path.dirname(
+                       os.path.dirname(os.path.abspath(__file__)))))),
+    "skills", "setup-mesh", "scripts")
+sys.path.insert(0, _SETUP_SCRIPTS)
+import staging_config  # noqa: E402
+
 # Above this many unpromoted candidates, say so. A large pool is not an error and never
 # blocks -- it is a nudge to promote, on the same footing as a pending home. The number is
 # a default, not a tuned value: it is roughly "more than a couple of un-drained ingestions".
@@ -166,8 +179,7 @@ def find_staging_dirs(hub_root):
 
     for dirpath, dirnames, _ in os.walk(hub_root, onerror=on_walk_error):
         dirnames[:] = [d for d in dirnames if not d.startswith(".")]
-        if os.path.basename(dirpath) == "candidates" and \
-                os.path.basename(os.path.dirname(dirpath)) == "staging":
+        if staging_config.is_candidates_dir(dirpath):
             found.append(dirpath)
     return sorted(found), walk_errors
 
@@ -191,7 +203,7 @@ def read_frontmatter(text):
 
 
 def collect_staged(hub_root):
-    """Return (rows, unreadable). Unpromoted candidates across the whole mesh.
+    """Return (rows, unreadable, misconfig). Unpromoted candidates across the whole mesh.
 
     FAILS CLOSED. A staging directory that exists but cannot be read is returned in
     `unreadable` and makes the caller exit non-zero, because "0 staged candidates" and
@@ -200,11 +212,23 @@ def collect_staged(hub_root):
     shape this project has now found twelve times; it is not going to be the thirteenth.
     Note the mesh may legitimately have NO staging dirs at all (nothing ingested yet), which
     is an empty pool, not an error -- absent is fine, unreadable is not.
+
+    `misconfig` is the third case, between those two: no staging dirs where the config says,
+    but `candidates/` directories present under some other parent name. That is a relocated
+    tree with the variable unset, and it produces an empty pool that looks exactly like a
+    fresh mesh. It warns rather than exits, because the pool is genuinely empty either way --
+    what the caller must not do is report that emptiness as normal.
     """
-    rows, unreadable = [], []
+    rows, unreadable, misconfig = [], [], []
 
     staging_dirs, walk_errors = find_staging_dirs(hub_root)
     unreadable.extend(walk_errors)
+
+    # Found nothing where staging is configured to be? Check whether candidates exist under
+    # some OTHER name before accepting an empty pool. Absent is legal; misconfigured is not,
+    # and the two look identical from here without this check.
+    if not staging_dirs:
+        misconfig = staging_config.find_misplaced_candidates(hub_root)
 
     for cand_dir in staging_dirs:
         try:
@@ -245,7 +269,7 @@ def collect_staged(hub_root):
                 "target": fm.get("target", ""),
             })
 
-    return rows, unreadable
+    return rows, unreadable, misconfig
 
 
 def main():
@@ -326,7 +350,7 @@ def main():
         # Do not "fix" this by resolving the path: reading the file a chunk names as its own
         # destination compares it to its own candidate from a prior run, which flags a re-run
         # of the same transcript as duplicating itself.
-        if "/staging/" in tp or tp.startswith("staging/"):
+        if staging_config.is_staging_path(tp):
             skipped_staging.append(cid)
             continue
 
@@ -365,7 +389,13 @@ def main():
             unresolvable.append((tp, targets[tp], full))
 
     # The second read set: unpromoted candidates from earlier ingestions.
-    staged, unreadable = collect_staged(hub_root)
+    staged, unreadable, misconfig = collect_staged(hub_root)
+
+    # To stderr, and in BOTH modes. The plain mode is a path list consumed by a caller, so a
+    # warning must not join it on stdout -- but staying silent is how the empty pool passed as
+    # normal in the first place.
+    if misconfig:
+        print(staging_config.misconfig_message(misconfig), file=sys.stderr)
 
     if not explain:
         for _, full, _ in existing:

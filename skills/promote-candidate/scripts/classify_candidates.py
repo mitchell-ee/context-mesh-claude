@@ -41,6 +41,17 @@ import os
 import re
 import sys
 
+# One definition of where staging lives -- see staging_config.py. This walk and the one in
+# collect_dedup_targets.py must agree about where candidates live or a claim becomes invisible
+# to one of them, which is precisely why both import the same module rather than restating it.
+_SETUP_SCRIPTS = os.path.join(
+    os.environ.get("CLAUDE_PLUGIN_ROOT",
+                   os.path.dirname(os.path.dirname(os.path.dirname(
+                       os.path.dirname(os.path.abspath(__file__)))))),
+    "skills", "setup-mesh", "scripts")
+sys.path.insert(0, _SETUP_SCRIPTS)
+import staging_config  # noqa: E402
+
 FM = re.compile(r"^---\s*\n(.*?)\n---", re.S)
 
 
@@ -108,7 +119,7 @@ def classify(fm, body):
                                "moves -- the doc or the world it describes. NEVER auto-apply: "
                                "a contradicts edge is never auto-resolved (vocabulary.md).")
 
-    if target.startswith("staging/") or "/staging/" in target:
+    if staging_config.is_staging_path(target):
         return "NO-HOME", ("Target is inside staging -- that is output, not canonical context. "
                            "This candidate has no canonical destination.")
 
@@ -150,8 +161,7 @@ def find_staging_dirs(root):
     found = []
     for dirpath, dirnames, _ in os.walk(root):
         dirnames[:] = [d for d in dirnames if not d.startswith(".")]
-        if os.path.basename(dirpath) == "candidates" and \
-                os.path.basename(os.path.dirname(dirpath)) == "staging":
+        if staging_config.is_candidates_dir(dirpath):
             found.append(dirpath)
     return sorted(found)
 
@@ -206,7 +216,14 @@ def main():
     if mesh_mode:
         cand_dirs = find_staging_dirs(hub)
         if not cand_dirs:
-            print(f"error: no staging/candidates/ anywhere under {hub}", file=sys.stderr)
+            print(f"error: no {staging_config.candidates_rel()} anywhere under {hub}",
+                  file=sys.stderr)
+            # Name the likely cause instead of leaving the reader to guess. A relocated tree
+            # with the variable unset is indistinguishable from an empty mesh from the error
+            # text alone, and the candidates are sitting right there under another name.
+            misplaced = staging_config.find_misplaced_candidates(hub)
+            if misplaced:
+                print(staging_config.misconfig_message(misplaced), file=sys.stderr)
             return 2
         for d in cand_dirs:
             # Label by the domain that owns the staging dir. This is presentational now:
@@ -218,11 +235,14 @@ def main():
                 label = os.path.basename(owner)
             collect(d, rows, label)
     else:
-        cand_dir = os.path.join(hub, "staging", "candidates")
+        cand_dir = staging_config.candidates_dir(hub)
         if not os.path.isdir(cand_dir):
-            print(f"error: no staging/candidates/ under {hub}", file=sys.stderr)
+            print(f"error: no {staging_config.candidates_rel()} under {hub}", file=sys.stderr)
             print("       (the Hub has one per domain -- use --mesh to walk them all)",
                   file=sys.stderr)
+            misplaced = staging_config.find_misplaced_candidates(hub)
+            if misplaced:
+                print(staging_config.misconfig_message(misplaced), file=sys.stderr)
             return 2
         collect(cand_dir, rows, os.path.basename(os.path.abspath(hub)))
 

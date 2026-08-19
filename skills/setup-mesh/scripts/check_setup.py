@@ -26,6 +26,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import staging_config  # noqa: E402  (one definition of where staging lives, never a second)
+
 INDEX = "context-index.md"
 
 # A markdown link to a repo-relative .md file: [label](path/to/file.md)
@@ -106,7 +109,7 @@ def find_listed_collections(index_text):
         p = m.group(1).strip()
         if p.startswith(("http://", "https://", "/")):
             continue
-        if p.split("/")[0] == "staging":
+        if staging_config.is_staging_first_segment(p):
             continue
         out.append(p)
     return sorted(set(out))

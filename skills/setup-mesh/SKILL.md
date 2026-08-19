@@ -66,8 +66,16 @@ index, which is exactly when setup runs. `survey_repo.py` instead walks the repo
 - **What is already there**, sorted into the three kinds of home — proposed **singletons**,
   proposed **collections** (a folder of same-typed files), and **known structures** the plugin
   already understands and that need no declaration.
+- **Mixed folders**, where single documents and a set of one kind share a directory.
 - **What appears to be missing**, as a short list of the *highest-level* file covering each
   gap.
+
+**A collection is proposed only on positive evidence**, never on proximity. Two markdown files
+sharing a directory is *not* a collection — that test proposed a `docs/` holding
+`architecture.md`, `deployment.md` and `glossary.md` as one kind. The folder name must name a
+kind that is many-of-one by nature, or the members must share a naming shape; a recognized
+one-of-a-kind file in the folder vetoes it outright. Each proposal carries **the reason it was
+made**, so the human judges the evidence rather than the verdict.
 
 **Everything it prints is a proposal, never a decision.** It cannot know what a file is about
 or when to load it, and those are the two things an index row needs. Walk the human through
@@ -100,6 +108,20 @@ splits what's missing into the only two categories that matter:
 **`scaffold_domain.py` creates containers and never a claim.** Directories
 (`staging/candidates/`) and a stub `context-index.md` **with no entries**. It will never
 create `technical/repo-overview.md`, and never add a row to the index.
+
+**Staging need not live at `staging/`.** If the team keeps proposed material elsewhere, set
+`CONTEXT_MESH_STAGING` before running anything — the whole tree moves together, keeping
+`candidates/` and `inbox/` beneath it, and every script in all three skills reads that one
+variable:
+
+```bash
+export CONTEXT_MESH_STAGING=_incoming
+```
+
+The scaffolded index documents the path and carries a note to keep the two in step. **If they
+drift, the tooling says so** rather than reporting an empty staging tree as normal — a
+relocated tree with the variable unset would otherwise look exactly like a mesh that has never
+ingested anything.
 
 **A domain is created at `domains/<name>/`, and a domain is nothing else.** There is no
 detection heuristic: anything under `domains/` is a domain, anything outside it isn't,
@@ -177,14 +199,25 @@ things per entry that only a human knows:
 **Propose, then confirm** — never assume `technical/system-behavior.md` is about what the
 default manifest says it's about. It's their domain.
 
-Two judgments the script hands you rather than making:
+Three judgments the script hands you rather than making:
 
-- **Is a proposed collection really one kind of context?** Several markdown files in one folder
-  is what a collection looks like on disk, and also what two unrelated documents look like. A
-  collection row claims they are the same kind, so ask.
+- **Is a proposed collection really one kind of context?** The survey proposes one only when
+  the folder name or the member names make the kind obvious, and it **prints the reason
+  next to each** — read the reason, not just the verdict. A collection row claims these files
+  are the same kind and that more are coming, so ask.
+- **Is anything in the singleton list actually a collection?** The survey deliberately
+  **under-calls**: a folder it does not recognize becomes singletons, one row each. That is the
+  safe default, not a finding. A team that keeps a set of one kind under a name only they use
+  will see it listed file-by-file, and should say so.
 - **Is a proposed singleton context at all?** Working notes, scratch files, and meeting
   detritus all end in `.md`. Anything not worth routing to should simply not be listed —
   leaving it out is free, and listing it makes routing consider it forever.
+
+**`MIXED FOLDERS` is an observation, not a defect.** It names folders where individual
+documents and a set-of-one-kind are tangled together — either a general folder that parents a
+collection, or a would-be collection holding one file that is plainly one-of-a-kind. Both are
+legal, and leaving them alone is a legitimate answer. Explain the trade and let the human
+choose; the survey has no opinion it is willing to act on.
 
 Write `context-index.md` following [templates/context-index.md](templates/context-index.md).
 

@@ -38,6 +38,9 @@ Exit codes: 0 = done (changed or already correct), 2 = bad input.
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import staging_config  # noqa: E402  (one definition of where staging lives, never a second)
+
 INDEX = "context-index.md"
 DOMAINS_DIR = "domains"
 
@@ -53,8 +56,8 @@ VOCABULARY = "v2.5"
 # the two are identical, and survey_mesh.py imports this rather than restating it -- the
 # survey once hardcoded its own copy and promised a directory this script would not create
 # (Minotaur finding 5).
-ROOT_DIRS = [os.path.join("staging", "candidates")]
-DOMAIN_DIRS = [os.path.join("staging", "candidates")]
+ROOT_DIRS = [staging_config.candidates_dir()]
+DOMAIN_DIRS = [staging_config.candidates_dir()]
 
 DOMAIN_INDEX = """# {name} — context index
 
@@ -109,7 +112,13 @@ to decide that. A file not listed here is invisible to routing.
 
 | Location | Purpose |
 |---|---|
-| `staging/candidates/` | Proposed nodes and edges awaiting the human gate. Nothing here is canonical. |
+| `{candidates}` | Proposed nodes and edges awaiting the human gate. Nothing here is canonical. |
+
+<!-- The staging tree may live somewhere other than `staging/`. It is set in ONE place --
+     the `{env_var}` environment variable -- and the whole tree moves together,
+     keeping `candidates/` and `inbox/` beneath it. If you change the path above, set that
+     variable to match: this table documents the location, but the scripts read the variable,
+     and a mismatch means the index describes a folder nothing reads or writes. -->
 
 ## Not in this mesh
 
@@ -217,7 +226,14 @@ Read it first; load only what the current task needs. Do not load the whole mesh
 
 | Location | Purpose |
 |---|---|
-| `staging/candidates/` | Cross-cutting proposals from ingestion, awaiting the human gate. Nothing here is canonical. |
+| `{candidates}` | Cross-cutting proposals from ingestion, awaiting the human gate. Nothing here is canonical. |
+| `{inbox}` | Optional drop location for raw material awaiting processing. |
+
+<!-- The staging tree may live somewhere other than `staging/`. It is set in ONE place --
+     the `{env_var}` environment variable -- and the whole tree moves together,
+     keeping `candidates/` and `inbox/` beneath it. If you change the paths above, set that
+     variable to match: this table documents the location, but the scripts read the variable,
+     and a mismatch means the index describes a folder nothing reads or writes. -->
 
 ## Not in this mesh
 
@@ -264,8 +280,13 @@ def scaffold(path, name, is_root, dry_run=False):
     else:
         created.append(INDEX)
         if not dry_run:
-            body = (ROOT_INDEX.format(vocabulary=VOCABULARY) if is_root
-                    else DOMAIN_INDEX.format(name=name))
+            body = (ROOT_INDEX.format(vocabulary=VOCABULARY,
+                                      candidates=staging_config.candidates_rel(),
+                                      inbox=staging_config.inbox_rel(),
+                                      env_var=staging_config.ENV_VAR) if is_root
+                    else DOMAIN_INDEX.format(name=name,
+                                             candidates=staging_config.candidates_rel(),
+                                             env_var=staging_config.ENV_VAR))
             with open(index_path, "w") as fh:
                 fh.write(body)
 
