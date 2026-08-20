@@ -211,6 +211,24 @@ Two tags ride on nodes. They are not relationships:
 - **`state: staging | canonical`** — promotion lifecycle position. A promoted candidate stays in
   staging marked `canonical`, as the audit trail.
 
+### Who accepted it, and when
+
+Four optional fields, written by the gate that ran:
+
+- **`staged_by` / `staged_at`** — set at the ingestion checkpoint, when a human approved the
+  placement.
+- **`promoted_by` / `promoted_at`** — set at promotion, when the claim entered canonical
+  context.
+
+**Two pairs, never one overwritten.** The gates are separate human acts, often weeks apart and
+sometimes performed by different people; collapsing them would lose who routed the claim.
+`promoted_by` being absent therefore means exactly one thing — not yet promoted.
+
+**They are not provenance and do not duplicate it.** *Where a claim came from* is the
+`derives-from` edge to its `Conversation`; *where it lands* is `target`. These record only what
+the graph could not: the human decision. That is why there is no separate approval log — one
+would restate provenance the edges already carry, and the two could then disagree.
+
 ---
 
 ## What the mesh does not type

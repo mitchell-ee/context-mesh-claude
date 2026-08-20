@@ -11,11 +11,13 @@ with no script or prompt edited.
 
 ## What is configurable, and what is not
 
-**The staging path is a PATH, not a name** -- it may be nested to any depth. `candidates/` and
-`inbox/` keep their names beneath it, so the tree relocates as a unit:
+**The staging path is a PATH, not a name** -- it may be nested to any depth. The fixed names
+beneath it keep their names, so the tree relocates as a unit:
 
-    staging/candidates/   ->   docs/staging/candidates/
-    staging/inbox/        ->   docs/staging/inbox/
+    staging/candidates/    ->   docs/staging/candidates/
+    staging/inbox/         ->   docs/staging/inbox/
+    staging/runs/          ->   docs/staging/runs/
+    staging/transcripts/   ->   docs/staging/transcripts/
 
 The path is interpreted RELATIVE TO THE HUB ROOT. **There is exactly one staging tree**
 (v0.17.0) -- domains do not have their own. With `docs/staging`, the mesh's staging is at
@@ -74,6 +76,7 @@ CONFIG_FILE = ".context-mesh"
 # Fixed names beneath the staging directory. Not configurable -- see the module docstring.
 CANDIDATES_DIR = "candidates"
 INBOX_DIR = "inbox"
+RUNS_DIR = "runs"
 
 # The environment variable a human sets, named here so error text and generated index prose
 # never hardcode it in a second place.
@@ -106,23 +109,25 @@ def _set_staging(value, source):
     return STAGING_DIR
 
 
-def read_config_file(hub_root):
-    """The staging path declared in `<hub>/.context-mesh`, or None.
+def read_config_keys(hub_root):
+    """Every `key: value` pair in `<hub>/.context-mesh`, as a dict. `{}` when there is no file.
 
-    Deliberately not YAML. This file has one job and adding a parser dependency to read one
-    key would be the wrong trade -- the format is `key: value`, one per line, `#` comments.
-    An unreadable or malformed file returns None rather than raising: the caller falls back to
-    the default, and a mesh whose staging is genuinely at `staging/` keeps working.
+    Deliberately not YAML. This file has a handful of keys and adding a parser dependency to
+    read them would be the wrong trade -- the format is `key: value`, one per line, `#`
+    comments. An unreadable or malformed file returns `{}` rather than raising: the caller
+    falls back to defaults, and a mesh whose staging is genuinely at `staging/` keeps working.
 
-    Unknown keys are ignored, so this file can grow later without old plugin versions choking.
+    Unknown keys are returned rather than dropped, so this file can grow without old plugin
+    versions choking on a key they do not know.
     """
     path = os.path.join(hub_root, CONFIG_FILE)
     try:
         with open(path) as fh:
             text = fh.read()
     except OSError:
-        return None
+        return {}
 
+    out = {}
     for line in text.splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
@@ -130,10 +135,15 @@ def read_config_file(hub_root):
         if ":" not in line:
             continue
         key, _, value = line.partition(":")
-        if key.strip() == "staging":
-            value = value.strip().strip('"').strip("'")
-            return value or None
-    return None
+        value = value.strip().strip('"').strip("'")
+        if value:
+            out[key.strip()] = value
+    return out
+
+
+def read_config_file(hub_root):
+    """The staging path declared in `<hub>/.context-mesh`, or None."""
+    return read_config_keys(hub_root).get("staging") or None
 
 
 def find_hub_root(start):
@@ -216,6 +226,62 @@ def inbox_dir(base=""):
 def candidates_rel():
     """The staging-relative candidates path as an index would write it, with a trailing slash."""
     return f"{STAGING_DIR}/{CANDIDATES_DIR}/"
+
+
+def runs_rel():
+    """The staging-relative runs path as an index would write it, with a trailing slash."""
+    return f"{STAGING_DIR}/{RUNS_DIR}/"
+
+
+# ---------------------------------------------------------------------------
+# Archival policy: does a source system hold the original, or must the Hub?
+# ---------------------------------------------------------------------------
+#
+# `source_kind` already decides this PER TRANSCRIPT and stays the authority. What the team
+# configures is only the DEFAULT for material that arrives with no datastore behind it --
+# which in practice means the inbox, where a dropped file is the only copy anyone knows about.
+#
+# `trusted` means "our source system keeps originals, so point at it and store nothing."
+# `hub` means "keep our own copy, because nothing else reliably will."
+#
+# The default is `hub`, and it is the safe direction: an unnecessary archive is a redundant
+# file a team can delete, while a missing one is a transcript that no longer exists anywhere.
+# Those errors are not equal, so the default is not a coin flip.
+ARCHIVE_KEY = "archive_inbox"
+ARCHIVE_TRUSTED = "trusted"
+ARCHIVE_HUB = "hub"
+DEFAULT_ARCHIVE = ARCHIVE_HUB
+
+# Fixed name beneath staging, alongside `candidates/` and `inbox/`. Where an archived
+# transcript lands so it outlives the run that ingested it.
+TRANSCRIPTS_DIR = "transcripts"
+
+
+def archive_policy(hub_root):
+    """`hub` or `trusted` -- whether the Hub keeps its own copy of sourceless material.
+
+    Unrecognized values fall back to `hub` rather than raising. A typo'd policy must not
+    silently become "store nothing": that is the one direction where the mistake is
+    unrecoverable, because the transcript it declined to keep is gone.
+    """
+    value = read_config_keys(hub_root).get(ARCHIVE_KEY, DEFAULT_ARCHIVE).strip().lower()
+    return value if value in (ARCHIVE_TRUSTED, ARCHIVE_HUB) else DEFAULT_ARCHIVE
+
+
+def transcripts_dir(base=""):
+    """`<base>/<staging>/transcripts` -- where archived transcripts outlive their run."""
+    return os.path.join(base, *STAGING_SEGMENTS, TRANSCRIPTS_DIR) if base \
+        else os.path.join(*STAGING_SEGMENTS, TRANSCRIPTS_DIR)
+
+
+def runs_dir(base=""):
+    """`<base>/<staging>/runs` -- one directory per ingestion run, holding its placements.
+
+    A run survives the session that created it: the placements JSON records a decision per
+    chunk, so a walk can be resumed, or an async review can be picked up days later.
+    """
+    return os.path.join(base, *STAGING_SEGMENTS, RUNS_DIR) if base \
+        else os.path.join(*STAGING_SEGMENTS, RUNS_DIR)
 
 
 def inbox_rel():

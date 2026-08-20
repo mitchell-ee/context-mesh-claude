@@ -151,13 +151,23 @@ flows through this same stage-1 path.
 
 ### 1c. Archive — only when nothing else will hold it
 
-For `archived` only: write the transcript next to the `Conversation` node
-(`staging/candidates/<conv-id>-transcript.md`) and record the path as `source_archive`.
+For `archived` only: write the transcript to `<staging>/transcripts/<conv-id>.md` and record
+the path as `source_archive`. Create the directory if it does not exist — it is made on demand,
+not scaffolded, because a mesh whose sources hold their own originals never needs one.
 
 The rule everywhere else is **no transcript stored** — not because the content is dangerous,
 but because a copy the mesh does not need is a copy that drifts from the system that owns it.
 That holds when a datastore keeps the original and fails when someone pastes in the only copy.
 So: **archive the exception, never the default.**
+
+**The team can widen the exception, and only in the safe direction.** `.context-mesh` may
+declare `archive_inbox: trusted`, meaning their source system reliably keeps originals of
+inbox material too. **The default is `hub` — keep our own copy** — and an unrecognized value
+falls back to it, because an unnecessary archive is a redundant file someone can delete while
+a missing one is a transcript that no longer exists anywhere. Those errors are not equal.
+
+**Archiving is what lets a resumed run still re-propose a chunk** (stage 4a). That is a
+consequence, not the justification: the reason to keep a copy is that nothing else will.
 
 Say plainly at the checkpoint and in the commit summary that an archive was written, and that
 it is the transcript **as received**. Retention period, access control, and deletion path are
@@ -172,6 +182,11 @@ plus source, date, and participants **as the transcript gives them**.
 
 Then **discard the working copy of the transcript.** Only the distilled version — and, for
 `archived`, the archived copy — survives the run.
+
+**Discarding is about the mesh, not about this session.** For a `referenced` transcript the
+datastore still has it and a resumed run can go back; for `archived` the copy under
+`<staging>/transcripts/` is the thing that survives. What is not kept is a stray duplicate the
+mesh does not need.
 
 ## Stage 2 — Distill into typed chunks
 
@@ -230,6 +245,28 @@ mandatory — no exceptions, and the validator enforces it.
 
 IDs are domain-prefixed and 4-digit: `payments:OPP-0042`. Only reference IDs that the
 index actually lists. **Never invent one.**
+
+### Chunk IDs must not collide with another run's
+
+**Number chunks with the allocator, never from 1.** IDs stay short — `k-0001`, `conv-0001` —
+because a human says "retry that one" at the gate. Uniqueness comes from allocating above
+what is already claimed, not from decorating the ID:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/ingest-conversation/scripts/allocate_ids.py" <hub-root> <placements.json> --apply
+```
+
+It scans **written candidates and every open run**, then renumbers this run above both and
+**rewrites the edges to match**. In an empty mesh a first run still gets `k-0001`; a
+concurrent second run gets `k-0005`.
+
+**Both pools matter.** A run is durable now, so two can sit open for days with IDs claimed but
+nothing written yet. Scanning only `candidates/` would hand both runs the same numbers.
+
+**Why this is not optional.** Every run used to start at 1, so two ingestions each produced
+`k-0001` — and stage 5 **silently overwrote** the first, leaving one file where there should
+be two, with no error. The `derives-from` edges of the second run then resolved to the *first*
+run's `Conversation`, so `check_references.py` reported confidently wrong provenance as valid.
 
 **Target path** — the exact file the human would approve into. The chunk is written to
 `staging/candidates/`, *tagged for* that eventual canonical path. Pick the **domain** by what
@@ -385,9 +422,20 @@ pool is worth draining and carries on. Surface it at the checkpoint; do not stop
 
 ## Stage 4a — The checkpoint (approve before the PR)
 
+**First, make the run durable.** The placements move out of a scratch file and into
+`<staging>/runs/<run-id>/`, where a decision is recorded per chunk:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/ingest-conversation/scripts/run_state.py" init <hub-root> <placements.json> --slug <short-name>
+```
+
+That prints the run ID. Everything below works against it, and **the run outlives the
+session** — a review can be picked up days later. See *Resuming* at the end of this stage.
+
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/ingest-conversation/scripts/render_checkpoint.py" <placements.json>
 python3 "${CLAUDE_PLUGIN_ROOT}/skills/ingest-conversation/scripts/render_checkpoint.py" <placements.json> --full
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/ingest-conversation/scripts/render_checkpoint.py" <placements.json> --group <target>
 ```
 
 **Two steps: show the shape, then ask how they want to read it.** Do not dump 26 chunk
@@ -409,33 +457,106 @@ batches later too.
 every chunk carries its own confidence inline. The `Lowest` column says why a group sits
 where it does — otherwise a 3-chunk group above a 6-chunk one looks arbitrary.
 
-**2. Ask how they want to review**, and honour the answer:
+**2. Ask how they want to review** — as a **selection list**, never as a free-text question.
 
-| Mode | What you do |
+> **Every fixed choice at this gate is presented with `AskUserQuestion`.** The mode, and every
+> approve / retry / drop decision in the walk. The reviewer picks from options; they do not
+> type a command. **The single exception is the retry reason** (below), which is free text
+> because it carries a correction no list can enumerate.
+
+Two modes:
+
+| Mode | What you do | Retry |
+|---|---|---|
+| **Walk them with me** | Group by group, riskiest first. Each chunk in full, then a selection list for what to do with it. | Available |
+| **Write a review file** | Every chunk in full to a single markdown file, to read at their own pace. Come back and walk it whenever. | Available *if the transcript was kept* |
+
+**Approving and dropping always survive; retry depends on the transcript.** The run is durable
+(see *Resuming*), so the review file is no longer a dead end — but re-proposing a chunk reads
+*from the source*, and whether the source still exists is `source_kind`'s answer. Check
+`run_state.py show` and **say which case this run is in when you offer the choice**, not
+afterwards.
+
+**There used to be a third mode** — "risky first, depth on request" — and the walk absorbs it.
+Chunks are already ordered riskiest-first, so walking *is* risk-first, and **approve all
+remaining** ends it whenever the reviewer decides the tail is routine. Mode 3 asked them to
+*pull* chunks into view; the walk *pushes* them in risk order and lets them stop. Do not
+reintroduce it.
+
+### The walk
+
+Groups in the order the overview showed them (riskiest group first); chunks within a group in
+risk order. For each chunk print it in full — title, body, target, rationale, flags, edges —
+then offer exactly:
+
+| Option | What happens |
 |---|---|
-| **1 — live, one group at a time** | Full bodies for one destination file; take approve/retry/drop; then the next group. |
-| **2 — async, one review file** | Write every chunk in full to a single markdown file for them to read at their own pace. |
-| **3 — live, risky first, depth on request** | Flagged and low-confidence chunks in full; the rest listed by ID/title/target, and they pull any into full view. |
+| **Approve this one** | Next chunk. |
+| **Retry it** | Ask, in free text, *what's wrong with it* — then re-propose and present it again. |
+| **Drop it** | Discard it. Next chunk. |
+| **Approve the rest of this file** | Every remaining chunk in this group is approved. Move to the next group. |
 
-**Mode 2 costs the retry loop, and you must say so before they choose it.** The transcript is
-discarded when the run ends, so `retry` stops being available once they leave. A placement
-they dislike later is a **hand-edit against a transcript that no longer exists**, not a
-re-proposal. Modes 1 and 3 keep the run live, where a retry is nearly free. Either offer to
-hold the run open, or state the trade plainly.
+At each group boundary, offer:
 
-**Nothing is hidden in any mode.** Confidence sets *order* and *depth*, never visibility — a
-placement marked high-confidence and wrong is precisely the failure that matters, and a
-filter would hide exactly that. Every mode at minimum **names every chunk** with its target
-and confidence. Mode 3 is a depth control the reviewer operates, not a filter you apply.
+| Option | What happens |
+|---|---|
+| **Next group** | Continue the walk. |
+| **Approve everything remaining** | Approve all chunks in all remaining groups. End the walk. |
+| **Revisit a chunk** | They name one already passed; re-present it. |
 
-Whatever the mode, they can:
+**Record every decision as it is made**, so the run can be resumed rather than restarted:
 
-- **approve** → validate, then write to staging (Stage 5)
-- **retry `<id>` [reason]** → re-propose that chunk with their correction
-- **drop `<id>`** → discard that chunk
+```bash
+run_state.py decide      <hub-root> <run-id> <chunk-id> approved|dropped
+run_state.py decide-rest <hub-root> <run-id> approved --target <destination>   # rest of a file
+run_state.py decide-rest <hub-root> <run-id> approved                          # all the rest
+```
 
-Address chunks **by ID**, not by position — the list is grouped now, so a positional index
-means something different depending on which group is on screen.
+**Both batch-outs are approvals, not skips.** Every chunk they cover was already named in the
+overview with its target and confidence, so nothing is approved sight-unseen. The two exist
+because they answer different judgements — *this file is fine, keep going* versus *I've seen
+enough, write it.*
+
+**Nothing is hidden in either mode.** Confidence sets *order* and *depth*, never visibility —
+a placement marked high-confidence and wrong is precisely the failure that matters, and a
+filter would hide exactly that. Both modes at minimum **name every chunk** with its target and
+confidence.
+
+Address chunks **by ID**, not by position — the list is grouped, so a positional index means
+something different depending on which group is on screen.
+
+When the walk ends, or the reviewer approves the review file: validate, then write to staging
+(Stage 5).
+
+### Resuming a run
+
+A run survives the session. Later — a different day, a different session — pick it up:
+
+```bash
+run_state.py list <hub-root>              # runs with pending chunks
+run_state.py show <hub-root> <run-id>     # what is left, grouped by destination
+```
+
+**Only `pending` chunks are re-presented.** Anything already approved or dropped is not asked
+about again, so resuming is not re-reviewing. This is what makes the review file a real
+option instead of a dead end: read it at leisure, come back, and drive the walk with notes in
+hand.
+
+**What survives, and what does not:**
+
+| | Needs the transcript? | Survives the session? |
+|---|---|---|
+| **approve** / **drop** | No — a decision about text already written down | Always |
+| **retry** | **Yes** — it re-proposes *from the source* | Only if the transcript was kept |
+
+**Whether the transcript was kept is `source_kind`'s answer, not a new setting** (stage 1). A
+`referenced` transcript lives in Granola or Slack, so a resumed run can go back to it. Material
+that arrived through the inbox has nothing behind it, so the Hub keeps its own copy under
+`<staging>/transcripts/` — unless the team declared `archive_inbox: trusted` in `.context-mesh`,
+meaning their source system holds originals.
+
+`run_state.py show` says which case a run is in. **Say it before offering retry**, not after
+they have chosen it.
 
 **This checkpoint is the human gate — there is no later PR into staging.** It has to be here,
 because right now the transcript is still in context and re-proposing is nearly free. After
@@ -466,15 +587,49 @@ Do not write to staging if validation fails.
 The checkpoint (4a) was the human gate. Once it's approved, **write directly to staging** —
 no branch, no PR.
 
-1. Write each chunk to its `staging/candidates/<id>.md` — at the Hub root for cross-cutting
-   context, in the owning domain folder for domain context. Use the template in `templates/candidate.md`.
-2. Commit. One commit for the run is fine.
+1. **Check that nothing would be overwritten** — the last line of defence, immediately before
+   writing:
+
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/skills/ingest-conversation/scripts/check_write_safe.py" <hub-root> <placements.json>
+   ```
+
+   Exit 0 means every ID is free. **Exit 1 means write nothing**: re-run `allocate_ids.py
+   --apply`, then re-check. **Never resolve a collision by overwriting** — the file on disk is
+   another run's claim, and edges elsewhere already point at that ID.
+
+2. Write each **approved** chunk to `<staging>/candidates/<id>.md` — **one tree, at the Hub
+   root** (v0.17.0), whatever domain the chunk is about; its `target:` is what records where
+   it will land. Use the template in `templates/candidate.md`. A chunk the reviewer dropped is
+   not written at all.
+3. **Stamp who accepted it and when** — `staged_by` from `git config user.email`, `staged_at`
+   as an ISO-8601 timestamp with offset. **Never write `promoted_by` or `promoted_at` here**:
+   those belong to a gate that has not run, and pre-filling them would assert a promotion that
+   never happened.
+4. Commit. One commit for the run is fine.
+
+**Two layers, and both are needed.** Allocation (stage 3) numbers above everything already
+claimed, which makes a collision rare. This check makes one that happens anyway *loud*.
+Allocation is a read-then-write, so two runs scanning at the same instant can still pick the
+same number — a genuine race no amount of scanning closes. **The write guard is the layer that
+must never be removed**: without it the failure is silent.
+
+**Why two pairs and not one.** A chunk passes two gates, often weeks apart and sometimes
+decided by different people. One `approved_by` pair overwritten at promotion would lose who
+routed it. Keeping both means `promoted_by` being absent says exactly one thing — this has not
+been promoted — rather than being ambiguous with "nobody recorded it."
+
+**No separate log, deliberately.** Where a claim came from is already the `derives-from` edge
+to the `Conversation` node, and where it lands is `target:`. The only things the graph could
+not answer were *who accepted it* and *when*, so those are the only fields added. A log would
+have duplicated provenance that is already modelled, and the two could then disagree.
 
 **Why no PR here.** A PR does two jobs — coordinate concurrent edits, and provide a review
-surface — and neither applies to a staging write. Each run is one person writing *new* files
-with unique IDs, so two concurrent ingests never collide; there is nothing to merge. And the
-review already happened at the checkpoint, over the same placements, while the transcript was
-still in hand. A staging PR would be a second showing of a decision already made, gating a
+surface — and neither applies to a staging write. Each run writes *new* files, so there is
+nothing to merge; **a PR would not have caught an ID collision either** — two branches each
+adding their own `k-0001.md` merge cleanly and produce exactly the silent overwrite. That is a
+job for allocation and the write guard, not for review. And the review already happened at the
+checkpoint, over the same placements, while the transcript was still in hand. A staging PR would be a second showing of a decision already made, gating a
 holding pen nobody's tools read from. The PR belongs at **promotion** (the `promote-candidate`
 skill), where *existing* canonical documents get edited, concurrent promotions can target the
 same file, and the stakes are org-wide. Staging is cheap and private by design; the undo for a
@@ -519,10 +674,14 @@ The facts now sit in staging, waiting for a separate, human-initiated promotion.
 1  ingest                 transcript in, unmodified, never persisted unless `archived`
 2  distill                typed chunks, decided/undecided, most of the transcript discarded
 3  propose placements     INDEXES ONLY -- target + legal edges + confidence
+                          IDs allocated above every claimed one, never from 1
 3.4 resolve members       COLLECTIONS ONLY -- which member? ambiguous -> CREATE, flag it
 3.5 dedup                 read ONLY the targets routing chose; drop dupes, flag conflicts
-4a checkpoint             overview grouped by destination (riskiest group first), then
-                          the reviewer picks a mode; approve / retry <id> / drop <id>  (THE human gate)
+4a checkpoint             run made durable (<staging>/runs/), overview grouped by
+                          destination (riskiest group first), then a guided walk --
+                          selection lists, never free text, except the retry reason.
+                          Resumable: only pending chunks are re-asked  (THE human gate)
 4b validate               legal-edge matrix; must pass
-5  write to staging       approved chunks -> staging/candidates/ -> commit  (no PR; PR is at promotion)
+5  write to staging       REFUSE to overwrite, then approved chunks ->
+                          staging/candidates/ -> commit  (no PR; PR is at promotion)
 ```

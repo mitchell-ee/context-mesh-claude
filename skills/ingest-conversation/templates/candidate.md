@@ -7,6 +7,15 @@ tag: <decided|undecided>
 state: staging                        # always. Nothing ingestion writes is canonical.
 target: <eventual/canonical/path.md>  # or: null, with a no-home note in the body
 confidence: <high|medium|low>
+# WHO decided this, and WHEN. Two gates, weeks apart, so two pairs -- never one pair
+# overwritten. `staged_*` is set at the ingestion checkpoint; `promoted_*` when the claim
+# enters canonical context, and the candidate survives promotion as the audit trail, so a
+# promoted file shows the whole journey. The pair is written by the gate that ran, so
+# `promoted_by` being absent means exactly one thing: this has not been promoted.
+staged_by: <git config user.email>
+staged_at: <ISO-8601 with offset>
+# promoted_by: <git config user.email>   # set by promote-candidate ONLY. Never at ingestion.
+# promoted_at: <ISO-8601 with offset>
 # duplicate_of: <path.md | candidate-id>   # set by dedup ONLY (stage 3.5). A Hub-relative
 #   path when canonical context already carries the claim, or a candidate ID when an
 #   unpromoted candidate from an earlier ingestion does. Omit entirely when not a duplicate.
@@ -31,6 +40,12 @@ what you were unsure about. If target is null, say what file would need to exist
 ## Provenance
 
 Derived from `<conversation-id>` (<source>, <date>).
+
+<!-- Where this came from is the `derives-from` edge above, not prose: follow it to the
+     Conversation node for `source_ref`, `source_kind` and `content_hash`. This section is the
+     human-readable restatement. WHO accepted it and WHEN are the `staged_*`/`promoted_*`
+     fields -- the two things the edges could not already answer, which is why they are the
+     only ones added. -->
 
 ---
 

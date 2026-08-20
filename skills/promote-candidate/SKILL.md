@@ -41,9 +41,11 @@ The classifier groups these with their batch and marks them `DUPLICATE OF <id>`.
 
 - **Merge the claim once.** The linked duplicate does not get merged again — that is the
   double-merge the link exists to prevent.
-- **Mark the duplicate `state: canonical` anyway.** It stays as the audit trail of the second
-  conversation that produced the claim: the fact was independently corroborated, and the
-  provenance of both is worth keeping.
+- **Mark the duplicate `state: canonical` anyway**, and stamp its `promoted_by`/`promoted_at`
+  like any other. It stays as the audit trail of the second conversation that produced the
+  claim: the fact was independently corroborated, and the provenance of both is worth keeping.
+  The stamp records *this* decision — that a human saw the link and accepted it — which is a
+  real judgement even though no text was merged.
 - **If the two are not actually the same claim, say so and merge both.** Dedup was
   instructed to be conservative, but a false link is possible and this is where it gets
   caught. A human overriding it here is the design working, not a failure.
@@ -95,7 +97,13 @@ For each batch:
    `derives-from` intact. **The candidate is the audit trail; the context file is the answer.**
 4. **Show the human the merged file**, not just the diff hunks — the point of batching is
    seeing the document whole.
-5. On approval: write, mark each candidate `state: canonical`, open one PR for the batch.
+5. On approval: write, mark each candidate `state: canonical`, **stamp `promoted_by` and
+   `promoted_at`**, open one PR for the batch.
+
+**Stamp the promotion, and leave `staged_by`/`staged_at` alone.** `promoted_by` comes from
+`git config user.email`, `promoted_at` is ISO-8601 with offset. The staging pair records who
+routed the claim at the ingestion gate — often weeks earlier, sometimes someone else — and
+overwriting it would destroy the only record of that decision. **Two pairs, never one.**
 
 **Never silently drop a claim.** If two candidates in a batch conflict *with each other*,
 that is the same problem as a `contradicts` — surface it, don't pick.
@@ -169,7 +177,8 @@ For each batch:
    keys, same heading shape. If there are none, use the plainest shape that fits the
    collection's *About* text, and **say that you had no sibling to follow**.
 4. **Show the human the whole new file**, plus its generated name.
-5. On approval: write it, mark the candidate `state: canonical`, open one PR for the batch.
+5. On approval: write it, mark the candidate `state: canonical`, stamp `promoted_by` and
+   `promoted_at`, open one PR for the batch.
 
 **The guard is the same as a pending home:** the collection's **row must already exist**.
 Promotion never creates a collection and the row justifying it in one motion — that would let

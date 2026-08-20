@@ -85,7 +85,7 @@ flowchart TD
 | **`/setup-mesh`** | Surveys what context the repo already has, scaffolds folders, helps declare each `context-index.md`, and lists everything the mesh tracks so you can check it. Idempotent — re-run it to add a domain. | A human supplies *what a file is about* and *when to load it*. A script cannot guess those. Migrations edit indexes and report; **moving content is always done by a human**. |
 | **`/structure-transcript`** | Optional. Turns a raw transcript into a clean, labelled one. **Cleanup and labelling only** — it never assigns a type. Also available as a plain prompt (`prompts/structure-transcript.md`) to run in any tool. | — |
 | **`/ingest-conversation`** | Distills into typed chunks, proposes a placement per chunk, then dedups/deconflicts against its intended target. The transcript itself is never modified. | — |
-| **The checkpoint** | Every proposed placement, **grouped by destination file**, groups ordered by their riskiest chunk. Then it asks how you want to read them. | **You.** `approve`, `retry <id> <reason>`, or `drop <id>`. |
+| **The checkpoint** | Every proposed placement, **grouped by destination file**, groups ordered by their riskiest chunk. Then it walks you through them, or writes them to one file to read at your own pace. | **You.** Pick from the choices offered per chunk: approve it, correct it, drop it — or approve the rest of a file, or all the rest. |
 | **`staging/candidates/`** | Where approved candidates land. Written directly — no PR. | — |
 | **`/promote-candidate`** | Classifies each candidate and batches by target file, so one document is one edit. | — |
 | **The PR** | The single outward-facing gate. | **You**, plus whoever reviews. |
@@ -96,7 +96,8 @@ flowchart TD
 ingestion cannot route to it. (Note: dedup opens and reads the chosen file once the routing choice is made.)
 
 **The checkpoint allows re-routing, not just approval.** It stops the run *while the
-transcript is still in context* — so `retry 3 wrong domain` is cheap. Staging is a direct write to create new change candidates and
+transcript is still in context* — so correcting a placement ("wrong domain") re-proposes it
+against the source, which is cheap. Staging is a direct write to create new change candidates and
 the PR doesn't happen until promotion, where existing docs get edited and concurrent changes can collide.
 
 **"No good home" is a legal answer.** If nothing in the index fits, the user is told:
@@ -222,8 +223,10 @@ The distinction the whole system turns on:
 - **Staging** — proposed, contradictory, or still in play. Nothing here is yet part of the context layer.
 
 A candidate never disappears when promoted. It stays in staging marked `state: canonical`, as
-the **audit trail**: the context file states the fact, the candidate records where it came from —
-which conversation, who raised it, when. That provenance chain is preserved.
+the **audit trail**: the context file states the fact, the candidate records how we know it.
+Which conversation it came from is the `derives-from` edge; **who accepted it and when** are
+`staged_by`/`staged_at` (the ingestion checkpoint) and `promoted_by`/`promoted_at` (promotion)
+— two gates, often weeks apart, so both are kept rather than one overwriting the other.
 
 ---
 

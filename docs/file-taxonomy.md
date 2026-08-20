@@ -24,6 +24,8 @@ technical/                cross-cutting technical context
 process/  governance/     how the team works; policy
 staging/candidates/       THE staging tree — everything ingested lands here
 staging/inbox/            optional drop location for raw material
+staging/runs/             one dir per ingestion run: placements + a decision per chunk
+staging/transcripts/      on demand — archived transcripts nothing else will hold
 domains/                  OPTIONAL — one folder per domain
   payments/
     technical/  product/  declared in the root index as domains/payments/…
@@ -33,8 +35,9 @@ domains/                  OPTIONAL — one folder per domain
 not enforced — `product/`, `technical/`, `process/` and `governance/` are simply where most
 teams put those things. **Any structure can be mapped in the index**, because the index is what
 routing reads; a file is reachable if and only if a row points at it. The two things that are
-fixed are the index's location (the Hub root) and the staging tree's shape (`candidates/` and
-`inbox/` beneath a configurable path — see [Staging](#staging)).
+fixed are the index's location (the Hub root) and the staging tree's shape (`candidates/`,
+`inbox/`, `runs/` and — on demand — `transcripts/` beneath a configurable path, see
+[Staging](#staging)).
 
 **One index, one staging tree.** A domain holds context files and nothing else — no index of
 its own, no staging dir. Its files are declared in the root index under their full path
@@ -229,31 +232,56 @@ of which domain it is about, and its `target:` records where it will go:
 ```
 staging/candidates/       one file per ingested candidate
 staging/inbox/            optional: raw material dropped for later processing
+staging/runs/             one dir per ingestion run: its placements, and a decision per chunk
+staging/transcripts/      created on demand: transcripts nothing else will hold
 ```
 
 **Staging is not canonical context.** Nothing here is believed yet. Ingestion writes here
 directly; promotion moves claims into canonical files.
 
 **A promoted candidate stays** in staging, marked `state: canonical`. It is the audit trail: the
-context file states the fact, the candidate records how we know it — which conversation, who
-raised it, when.
+context file states the fact, the candidate records how we know it — which conversation
+(`derives-from`), and who accepted it at each gate (`staged_by`/`staged_at`, then
+`promoted_by`/`promoted_at`).
 
 **`staging/inbox/` is a drop location, not a collection.** No naming pattern, nothing routes to
-it. Processed items move to `staging/inbox/processed/`.
+it. **A processed transcript moves to `staging/transcripts/`** when the Hub is the only thing
+holding it — which also answers what "processed" means on disk: an item still in `inbox/` has
+not been ingested.
 
-**The staging tree can live anywhere.** The whole tree moves together, keeping `candidates/`
-and `inbox/` beneath it. The value is a **path**, so it may be nested to any depth.
+**`staging/runs/` is work-in-progress, not context.** A run holds the placements a checkpoint
+is deciding on, each chunk carrying `pending`, `approved`, or `dropped`. Nothing here is
+routed to and nothing reads it as context; it exists so a review can be resumed in a later
+session rather than restarted. A run with no pending chunks is finished.
 
-**Declare it in `.context-mesh` at the Hub root** — a two-line file, committed with the repo:
+**`staging/transcripts/` is created on demand, never scaffolded.** A mesh whose source systems
+keep their own originals never has one — and scaffolding an empty one would advertise a
+retention posture the team declined. Whether it appears is `source_kind` per transcript, with
+`archive_inbox` in `.context-mesh` setting the default for material that arrives with nothing
+behind it.
+
+**The staging tree can live anywhere.** The whole tree moves together, keeping its
+subdirectories beneath it. The value is a **path**, so it may be nested to any depth.
+
+**Declare it in `.context-mesh` at the Hub root** — a small `key: value` file, committed with
+the repo:
 
 ```
 # .context-mesh
 staging: docs/staging
+archive_inbox: trusted
 ```
 
 That is the durable form: it travels with the repo, so anyone who clones the Hub gets the right
 layout with nothing to install and nothing to remember — including CI and headless agent runs.
-`setup-mesh` writes this file for you when staging is anywhere other than the default.
+`setup-mesh` writes this file for you when either setting is non-default. **The two keys are
+independent** — a Hub at the default `staging/` still gets a file if it declares an archive
+policy.
+
+**`archive_inbox` says whether a source system holds the original.** `trusted` means it does,
+so nothing is archived here; `hub` (the default) means it does not. An unrecognized value
+falls back to `hub`, because an unnecessary archive is a file someone can delete and a missing
+one is a transcript that is simply gone.
 
 **`CONTEXT_MESH_STAGING` overrides it**, for a one-off or a CI override:
 

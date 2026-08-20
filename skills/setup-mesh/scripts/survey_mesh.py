@@ -435,7 +435,8 @@ def main():
     # is the fail-CLOSED shape: a correct mesh reported broken, with no way to clear it.
     staging_config.configure(hub_root)
     scaffold_domain.ROOT_DIRS = [staging_config.candidates_dir(),
-                                 staging_config.inbox_dir()]
+                                 staging_config.inbox_dir(),
+                                 staging_config.runs_dir()]
 
     if as_manifest:
         groups = manifest(hub_root)

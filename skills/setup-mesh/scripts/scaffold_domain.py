@@ -31,6 +31,12 @@ Usage:
     scaffold_domain.py <hub-root>                      # stand up the Hub root
     scaffold_domain.py <hub-root> <domain> [<domain>...]
     scaffold_domain.py <hub-root> <domain> --dry-run
+    scaffold_domain.py <hub-root> --archive trusted    # sources hold their own originals
+
+`--archive` captures the team's answer to whether a source system keeps the original of
+ingested material. `hub` (the default) means it does not, so the Hub keeps its own copy --
+which is the only safe default, because for anything dropped in the inbox the Hub's copy is
+the only one there is.
 
 Exit codes: 0 = done (changed or already correct), 2 = bad input.
 """
@@ -57,11 +63,17 @@ VOCABULARY = "v2.5"
 # survey once hardcoded its own copy and promised a directory this script would not create
 # (Minotaur finding 5).
 #
-# THE ROOT ALSO GETS `inbox/`, because the ROOT index template lists `<staging>/inbox/`. A row
+# THE ROOT ALSO GETS `inbox/` AND `runs/`, because the ROOT index template lists both. A row
 # naming a directory that setup does not create is precisely the Minotaur-5 failure above, in
 # the same file -- `a missing directory is an error` (file-taxonomy.md), so an advertised inbox
 # must exist. Whenever a row is added to a template, add its directory here.
-ROOT_DIRS = [staging_config.candidates_dir(), staging_config.inbox_dir()]
+#
+# `transcripts/` is NOT here and is not advertised: it is created on demand, the first time a
+# transcript is actually archived. A Hub whose source system holds originals (`archive_inbox:
+# trusted`) never writes one, and scaffolding an empty `transcripts/` into such a mesh would
+# advertise a retention posture the team explicitly declined.
+ROOT_DIRS = [staging_config.candidates_dir(), staging_config.inbox_dir(),
+             staging_config.runs_dir()]
 
 # A DOMAIN GETS NO STAGING AND NO INDEX (v0.17.0). Staging and the index are centralized at
 # the Hub root; a domain is a folder of context files and an ID namespace, not a container.
@@ -167,12 +179,17 @@ Read it first; load only what the current task needs. Do not load the whole mesh
 |---|---|
 | `{candidates}` | Cross-cutting proposals from ingestion, awaiting the human gate. Nothing here is canonical. |
 | `{inbox}` | Optional drop location for raw material awaiting processing. |
+| `{runs}` | One directory per ingestion run, holding its proposed placements and the decision recorded for each. A run with pending chunks is a review someone can still come back to. |
 
 <!-- The staging tree may live somewhere other than `staging/`. It is set in ONE place --
      the `{env_var}` environment variable -- and the whole tree moves together,
-     keeping `candidates/` and `inbox/` beneath it. If you change the paths above, set that
-     variable to match: this table documents the location, but the scripts read the variable,
-     and a mismatch means the index describes a folder nothing reads or writes. -->
+     keeping `candidates/`, `inbox/` and `runs/` beneath it. If you change the paths above,
+     set that variable to match: this table documents the location, but the scripts read the
+     variable, and a mismatch means the index describes a folder nothing reads or writes.
+
+     `<staging>/transcripts/` may also appear. It is created only when a transcript is
+     archived -- material with no source system behind it, where the Hub's copy is the only
+     one. A mesh whose sources hold their own originals never has one. -->
 
 ## Not in this mesh
 
@@ -192,7 +209,7 @@ Read it first; load only what the current task needs. Do not load the whole mesh
 """
 
 
-def scaffold(path, name, is_root, dry_run=False):
+def scaffold(path, name, is_root, dry_run=False, archive=None):
     """Create missing containers. Returns (created, skipped) lists of relative paths."""
     created, skipped = [], []
 
@@ -225,20 +242,37 @@ def scaffold(path, name, is_root, dry_run=False):
     # Only when it is NOT the default: a Hub at plain `staging/` needs no file, and creating
     # one everywhere would be clutter that most meshes never edit. Never overwritten -- if the
     # file exists it is the team's, and it is what produced this value in the first place.
+    # The archive policy is captured for the same reason and INDEPENDENTLY: a Hub at the
+    # default `staging/` may still need to declare that its source systems hold originals, so
+    # the file is written when EITHER setting is non-default. Tying the second key to the first
+    # would silently drop a policy the team was asked for and answered.
     cfg_path = os.path.join(path, staging_config.CONFIG_FILE)
-    if staging_config.STAGING_DIR != staging_config.DEFAULT_STAGING:
+    non_default_staging = staging_config.STAGING_DIR != staging_config.DEFAULT_STAGING
+    non_default_archive = archive is not None and archive != staging_config.DEFAULT_ARCHIVE
+    if non_default_staging or non_default_archive:
         if os.path.isfile(cfg_path):
             skipped.append(staging_config.CONFIG_FILE)
         else:
             created.append(staging_config.CONFIG_FILE)
             if not dry_run:
                 with open(cfg_path, "w") as fh:
-                    fh.write(
-                        "# Where this mesh keeps its staging tree, relative to the Hub root.\n"
-                        "# Committed so the setting travels with the repo instead of living\n"
-                        f"# in one person's shell. {staging_config.ENV_VAR} overrides it.\n"
-                        f"staging: {staging_config.STAGING_DIR}\n"
-                    )
+                    if non_default_staging:
+                        fh.write(
+                            "# Where this mesh keeps its staging tree, relative to the Hub root.\n"
+                            "# Committed so the setting travels with the repo instead of living\n"
+                            f"# in one person's shell. {staging_config.ENV_VAR} overrides it.\n"
+                            f"staging: {staging_config.STAGING_DIR}\n"
+                        )
+                    if non_default_archive:
+                        if non_default_staging:
+                            fh.write("\n")
+                        fh.write(
+                            "# Whether a source system holds the original of ingested material.\n"
+                            "# `trusted`: it does -- point at it and store nothing here.\n"
+                            "# `hub` (default): it does not -- keep our own copy, because for\n"
+                            "# anything dropped in the inbox this is the only copy there is.\n"
+                            f"{staging_config.ARCHIVE_KEY}: {archive}\n"
+                        )
 
     index_path = os.path.join(path, INDEX)
     if os.path.isfile(index_path):
@@ -252,6 +286,7 @@ def scaffold(path, name, is_root, dry_run=False):
             body = ROOT_INDEX.format(vocabulary=VOCABULARY,
                                      candidates=staging_config.candidates_rel(),
                                      inbox=staging_config.inbox_rel(),
+                                     runs=staging_config.runs_rel(),
                                      env_var=staging_config.ENV_VAR)
             with open(index_path, "w") as fh:
                 fh.write(body)
@@ -262,7 +297,33 @@ def scaffold(path, name, is_root, dry_run=False):
 def main():
     argv = sys.argv[1:]
     dry_run = "--dry-run" in argv
-    args = [a for a in argv if not a.startswith("--")]
+
+    # `--archive` takes a VALUE, so its argument must be consumed rather than filtered with
+    # the bare flags -- otherwise `trusted` would be read as a domain name and scaffolded.
+    archive = None
+    rest = []
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--archive":
+            if i + 1 >= len(argv):
+                print(f"error: --archive needs {staging_config.ARCHIVE_TRUSTED} or "
+                      f"{staging_config.ARCHIVE_HUB}", file=sys.stderr)
+                return 2
+            archive = argv[i + 1].strip().lower()
+            # REJECTED, never quietly defaulted. Silently treating a typo as `hub` would be
+            # the safe direction, but it would also tell a team their `trusted` answer was
+            # recorded when it was not, and they would find out only from an archive that
+            # kept appearing.
+            if archive not in (staging_config.ARCHIVE_TRUSTED, staging_config.ARCHIVE_HUB):
+                print(f"error: --archive must be {staging_config.ARCHIVE_TRUSTED} or "
+                      f"{staging_config.ARCHIVE_HUB}, got {argv[i + 1]!r}", file=sys.stderr)
+                return 2
+            i += 2
+            continue
+        rest.append(argv[i])
+        i += 1
+
+    args = [a for a in rest if not a.startswith("--")]
 
     if not args:
         print(__doc__)
@@ -281,7 +342,8 @@ def main():
     # not exist.
     staging_config.configure(hub_root)
     global ROOT_DIRS
-    ROOT_DIRS = [staging_config.candidates_dir(), staging_config.inbox_dir()]
+    ROOT_DIRS = [staging_config.candidates_dir(), staging_config.inbox_dir(),
+                 staging_config.runs_dir()]
 
     # The Hub root is checked and stood up on EVERY run, single-domain or many. It is just
     # another idempotent step that happens to run first.
@@ -301,7 +363,7 @@ def main():
             os.makedirs(path, exist_ok=True)
         elif not os.path.isdir(path):
             print(f"{name}: would create the domain folder itself")
-        created, skipped = scaffold(path, name, is_root, dry_run=dry_run)
+        created, skipped = scaffold(path, name, is_root, dry_run=dry_run, archive=archive)
         label = "(hub root)" if is_root else name
         verb = "would create" if dry_run else "created"
 

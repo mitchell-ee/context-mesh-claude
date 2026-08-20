@@ -126,6 +126,33 @@ staging: docs/staging
 is not the default, `scaffold_domain.py` writes `.context-mesh` for you — so the setting stops
 being one person's shell state at the moment the mesh is created. A default Hub gets no file.
 
+### Ask whether their source systems keep originals
+
+**One question, and it decides whether transcripts pile up in the Hub.** Ask it as a selection
+list when scaffolding the root:
+
+| Answer | Means | Written as |
+|---|---|---|
+| **Our tools keep the originals** | Granola, Slack, Zoom, a ticket system — ingestion points at them and stores nothing | `archive_inbox: trusted` |
+| **Keep our own copy** (default) | Nothing reliably holds the original, so the Hub must | `archive_inbox: hub` |
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/setup-mesh/scripts/scaffold_domain.py" <hub-root> --archive trusted
+```
+
+**`hub` is the default and the safe direction.** An unnecessary archive is a redundant file a
+team can delete; a missing one is a transcript that no longer exists anywhere. An unrecognized
+value falls back to `hub` for the same reason — though `--archive` itself rejects a bad value
+outright rather than recording something the team did not choose.
+
+**This sets a default, it does not override `source_kind`.** Ingestion still decides per
+transcript: a Granola note is `referenced` whatever this says. What the answer governs is
+material arriving with nothing behind it — the inbox, where the Hub's copy is the only copy
+anyone knows about.
+
+**It is independent of the staging path.** A Hub at the default `staging/` still gets a
+`.context-mesh` if it answers `trusted`.
+
 **Recommend the file when the path is non-default.** An environment variable has to be
 re-exported in every terminal, CI job, and agent run; forgetting it makes the staged pool come
 back empty, which looks exactly like a mesh that has never ingested anything. The tooling exits

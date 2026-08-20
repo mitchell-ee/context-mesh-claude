@@ -18,13 +18,20 @@ ordering existed for -- the placements most likely to be wrong are read while at
 freshest -- without scattering a document's chunks across the list.
 
 EVERYTHING IS ALWAYS SHOWN. Confidence decides ORDER and DEPTH, never visibility. A
-miscalibrated chunk marked high is exactly the failure that matters, so no review mode may
-omit one: the terse modes still NAME every chunk with its target and confidence, and let the
-reviewer pull any of them into full view.
+miscalibrated chunk marked high is exactly the failure that matters, so neither review mode
+may omit one: the overview NAMES every chunk with its target and confidence before the
+reviewer chooses how to read them.
+
+THE MODE MENU IS NOT PRINTED. The skill presents the choice as a selection list, and every
+approve/retry/drop decision in the walk is a selection list too -- the reviewer picks, they
+do not type a command. The only free text at the gate is a retry REASON, which carries a
+correction no list can enumerate. This script prints what a reviewer needs in order to
+choose; it does not ask the question.
 
 Usage:
-    render_checkpoint.py <placements.json>             # the grouped overview + review modes
+    render_checkpoint.py <placements.json>             # the grouped overview
     render_checkpoint.py <placements.json> --full      # every chunk in full, grouped
+    render_checkpoint.py <placements.json> --group <target>   # ONE group in full, for the walk
     render_checkpoint.py <placements.json> --summary   # markdown for the commit body
     render_checkpoint.py <placements.json> --pr-body   # deprecated alias for --summary
 """
@@ -283,37 +290,72 @@ def render_terminal(chunks, dropped, conv=None, full=False, conv_count=0):
             print()
 
     if full or not live:
+        # No command syntax here either: the reviewer is offered these as a selection
+        # list, so printing `retry <id> [reason]` would teach a vocabulary they never
+        # need to type. What they DO need is what the choices mean, and that retry has
+        # a deadline.
         print(BANNER)
-        print("Approve, or say what's wrong.")
+        print("For each chunk you can approve it, correct it, or drop it -- and you can")
+        print("approve the rest of a file, or all the rest, once the remainder looks")
+        print("routine. Correcting a chunk re-proposes it against the transcript.")
         print()
-        print("  approve              -> validate, then write to staging")
-        print("  retry <id> [reason]  -> re-propose that chunk with your correction")
-        print("  drop <id>            -> discard that chunk entirely")
-        print()
-        print("Retry works only while this run is live: the transcript is still in context")
+        print("That works only while this run is live: the transcript is still in context")
         print("and is discarded at the end. Once written, a wrong placement is hand-edited.")
         print(BANNER)
         return
 
+    # The MODE CHOICE IS NOT PRINTED HERE. The skill presents it as a selection list
+    # (AskUserQuestion), so printing a numbered menu would duplicate it and invite the
+    # free-text answer the selection list exists to replace. What is printed is the
+    # context a reviewer needs BEFORE choosing -- notably the retry trade-off, which is
+    # the one consequence that cannot be undone once the run ends.
     print(BANNER)
-    print("How do you want to review them?")
+    print("TWO WAYS TO REVIEW THEM")
     print(BANNER)
     print()
-    print("  1. Live, one group at a time   -- full bodies for one destination file, you")
-    print("                                    approve/retry/drop, then the next group.")
-    print("  2. Async -- one review file    -- everything written to a single markdown file")
-    print("                                    to read at your own pace.")
-    print("  3. Live, risky first, you set  -- the flagged and low-confidence chunks in full;")
-    print("     the depth for the rest         the rest listed, and you pull any into view.")
+    print("  Walk them with me   -- group by group, riskiest first. Each chunk in full,")
+    print("                         then you approve it, correct it, or drop it. You can")
+    print("                         approve the rest of a file, or all the rest, whenever")
+    print("                         the remainder looks routine.")
     print()
-    print("Nothing is hidden in any mode: every chunk is at least named, with its target")
+    print("  Write a review file -- everything in full to one markdown file, to read at")
+    print("                         your own pace.")
+    print()
+    print("Nothing is hidden either way: every chunk is at least named, with its target")
     print("and confidence. A high-confidence chunk that is wrong is the failure that")
-    print("matters, so no mode omits one -- the modes differ in DEPTH, not coverage.")
+    print("matters, so neither mode omits one -- they differ in DEPTH, not coverage.")
     print()
-    print("On mode 2: the transcript is discarded when this run ends, so `retry` stops")
-    print("being available once you leave. A placement you dislike later is a hand-edit,")
-    print("not a re-proposal. Modes 1 and 3 keep the run live, where retry is nearly free.")
+    print("The review file costs the retry loop. The transcript is discarded when this")
+    print("run ends, so a placement you dislike later is a hand-edit against a transcript")
+    print("that no longer exists -- not a re-proposal. Walking keeps the run live, where")
+    print("retry is nearly free.")
     print(BANNER)
+
+
+def render_group(chunks, target):
+    """One destination file's chunks, in full -- the unit the walk presents at a time.
+
+    Returns 0 when the group was rendered, 1 when the target names no group. It MUST fail
+    loudly: a walk that asks for a group and gets a silent empty render would step over
+    every chunk in it, approving nothing and showing nothing, and the reviewer would see a
+    file scroll past with no content and reasonably assume it held none. That is the
+    fail-open shape -- an exclusion that looks like an absence.
+    """
+    groups = dict(group_by_target([c for c in chunks if not c.get("duplicate_of")]))
+    members = groups.get(target)
+    if members is None:
+        print(f"error: no group with destination {target!r}", file=sys.stderr)
+        known = "\n  ".join(sorted(groups)) or "(none -- nothing to place)"
+        print(f"known destinations:\n  {known}", file=sys.stderr)
+        return 1
+
+    print("-" * 78)
+    print(f"{target}  ({len(members)})")
+    print("-" * 78)
+    print()
+    for c in members:
+        render_chunk_full(c)
+    return 0
 
 
 def render_pr_body(chunks, dropped, conv=None):
@@ -382,7 +424,24 @@ def render_pr_body(chunks, dropped, conv=None):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    # `--group` takes a VALUE, so it cannot be filtered with the rest of the flags -- its
+    # argument is a bare word and would otherwise be mistaken for the placements file.
+    argv = sys.argv[1:]
+    group_target = None
+    rest = []
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--group":
+            if i + 1 >= len(argv):
+                print("error: --group needs a destination path", file=sys.stderr)
+                return 2
+            group_target = argv[i + 1]
+            i += 2
+            continue
+        rest.append(argv[i])
+        i += 1
+
+    args = [a for a in rest if not a.startswith("--")]
     if len(args) != 1:
         print(__doc__)
         return 2
@@ -411,11 +470,13 @@ def main():
     chunks = [c for c in chunks if c.get("type") != "Conversation"]
 
     # --summary is the current flag; --pr-body is kept as a deprecated alias.
-    if "--summary" in sys.argv or "--pr-body" in sys.argv:
+    if "--summary" in rest or "--pr-body" in rest:
         render_pr_body(chunks, dropped, conv)
+    elif group_target is not None:
+        return render_group(chunks, group_target)
     else:
         render_terminal(chunks, dropped, conv,
-                        full="--full" in sys.argv, conv_count=len(convs))
+                        full="--full" in rest, conv_count=len(convs))
     return 0
 
 
