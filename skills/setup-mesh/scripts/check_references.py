@@ -275,8 +275,39 @@ def resolve(edge, target, domain_name, hub_root, domains, node_ids, artifact_ids
     if looks_like_path(target):
         # Every path is Hub-relative -- one candidate, no guessing, no declaring-repo context.
         full = os.path.join(hub_root, target)
+
+        # A TRAILING SLASH MEANS COLLECTION, and the check must follow the convention rather
+        # than assume every path names a file. Member resolution's `created` and
+        # `created-near-match` outcomes both *leave the target as the folder* (ingest-
+        # conversation/SKILL.md stage 3.4), and ambiguity is documented to resolve to CREATE
+        # -- so a folder target is the DEFAULT shape, not an edge case. Testing isfile() alone
+        # reported every one of them broken while the directory sat there: fail-CLOSED, the
+        # "new team does everything right and the tool says they haven't" shape of #15.
+        #
+        # Deliberately NOT os.path.exists(). exists() is true for any inode, so it would also
+        # bless a DIRECTORY named `x.md` -- promotion would later write into it and the check
+        # would have passed clean. That trades a fail-closed bug for a fail-open one, which is
+        # the trade every bug in the table above is made of. Each shape asserts what the
+        # reference MEANS: `foo/` must be a directory, `foo.md` must be a file, and the wrong
+        # kind on disk fails in both directions.
+        if target.endswith("/"):
+            if os.path.isdir(full):
+                return ("path", True, "")
+            # rstrip before the isfile probe: a trailing slash makes isfile() False even when
+            # the path names a real file, which reported "does not exist" about a file sitting
+            # right there -- the same misleading diagnosis this whole fix started from.
+            if os.path.isfile(full.rstrip("/")):
+                return ("path", False,
+                        f"`{target}` ends in `/` (a collection) but is a FILE ({full}). "
+                        f"Drop the trailing slash, or make it a directory.")
+            return ("path", False, f"`{target}` does not exist ({full}).")
+
         if os.path.isfile(full):
             return ("path", True, "")
+        if os.path.isdir(full):
+            return ("path", False,
+                    f"`{target}` exists but is a DIRECTORY ({full}). Add a trailing slash "
+                    f"to reference it as a collection, or point at a file inside it.")
         return ("path", False, f"`{target}` does not exist ({full}).")
 
     return ("unknown", False, f"cannot classify target `{target}`.")

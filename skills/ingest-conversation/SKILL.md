@@ -263,6 +263,12 @@ concurrent second run gets `k-0005`.
 **Both pools matter.** A run is durable now, so two can sit open for days with IDs claimed but
 nothing written yet. Scanning only `candidates/` would hand both runs the same numbers.
 
+**No `--run` here, and `--run` on every later call.** At this point the run has not been
+persisted, so there is nothing of its own to exclude. Once stage 4's `run_state.py init` has
+copied these IDs into `runs/<run-id>/placements.json`, **any** re-allocation must pass
+`--run <run-id>` or the run will renumber above itself. The documented case is stage 5's write
+guard; the rule is the state, not that one call site.
+
 **Why this is not optional.** Every run used to start at 1, so two ingestions each produced
 `k-0001` — and stage 5 **silently overwrote** the first, leaving one file where there should
 be two, with no error. The `derives-from` edges of the second run then resolved to the *first*
@@ -597,6 +603,15 @@ no branch, no PR.
    Exit 0 means every ID is free. **Exit 1 means write nothing**: re-run `allocate_ids.py
    --apply`, then re-check. **Never resolve a collision by overwriting** — the file on disk is
    another run's claim, and edges elsewhere already point at that ID.
+
+   **Pass `--run <run-id>` on any re-allocation.** By this stage `run_state.py init` has
+   persisted this run's IDs, so a plain re-run scans its own claims back as a competitor's and
+   renumbers above *itself* — `k-0001` becomes `k-0003` in an otherwise empty mesh. The flag
+   excludes exactly one run, so every other open run is still scanned:
+
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/skills/ingest-conversation/scripts/allocate_ids.py" <hub-root> <placements.json> --apply --run <run-id>
+   ```
 
 2. Write each **approved** chunk to `<staging>/candidates/<id>.md` — **one tree, at the Hub
    root** (v0.17.0), whatever domain the chunk is about; its `target:` is what records where

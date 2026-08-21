@@ -33,9 +33,16 @@ Scans BOTH pools, for the same reason dedup does:
     written. Without this, two runs open at once (which is now the normal workflow, since a
     run outlives its session) would allocate identically until the first one writes.
 
+RE-ALLOCATING A PERSISTED RUN NEEDS `--run`. Allocation is not once-only -- stage 5's write
+guard says to re-run it on a collision, and a gate-time retry can too. By then `run_state.py
+init` has copied this run's IDs into `runs/<id>/placements.json`, and without `--run` the run
+scans its own claims back as a competitor's and renumbers above itself: `k-0001` -> `k-0003`
+in an empty mesh. It excludes exactly ONE run, so every other open run is still scanned.
+
 Usage:
     allocate_ids.py <hub-root>                  # report the next free number per prefix
     allocate_ids.py <hub-root> <placements.json> --apply
+    allocate_ids.py <hub-root> <placements.json> --apply --run <run-id>   # after init
 """
 
 import json
@@ -92,12 +99,18 @@ def scan_candidates(hub_root):
     return found
 
 
-def scan_open_runs(hub_root):
+def scan_open_runs(hub_root, exclude_run=None):
     """Every ID claimed by a run that has not been written to staging yet.
 
     A run is durable now, so two can sit open for days. Their IDs are claimed the moment
     placements are created, long before stage 5 writes anything -- so a scan of
     `candidates/` alone would hand the same numbers to both.
+
+    `exclude_run` omits ONE run: the one being renumbered. A run must not read its own
+    persisted IDs back as if a competitor held them -- see allocate() for the failure that
+    caused. Every OTHER open run is still scanned, so the concurrent-run protection this
+    function exists for is untouched. Excluding more than one would reintroduce the original
+    bug, which is why this takes a single run id and not a list.
     """
     found = set()
     runs_root = os.path.join(hub_root, staging_config.runs_dir())
@@ -105,6 +118,8 @@ def scan_open_runs(hub_root):
         return found
 
     for run_id in os.listdir(runs_root):
+        if exclude_run is not None and run_id == exclude_run:
+            continue
         path = os.path.join(runs_root, run_id, "placements.json")
         if not os.path.isfile(path):
             continue
@@ -140,10 +155,10 @@ def unreadable_runs(hub_root):
     return bad
 
 
-def next_numbers(hub_root):
+def next_numbers(hub_root, exclude_run=None):
     """The next free number per prefix: {"k": 5, "conv": 2}. Prefixes unseen start at 1."""
     highest = {}
-    for cid in scan_candidates(hub_root) | scan_open_runs(hub_root):
+    for cid in scan_candidates(hub_root) | scan_open_runs(hub_root, exclude_run):
         parsed = parse_id(cid)
         if not parsed:
             continue
@@ -152,7 +167,7 @@ def next_numbers(hub_root):
     return {p: n + 1 for p, n in highest.items()}
 
 
-def allocate(data, hub_root, width=4):
+def allocate(data, hub_root, width=4, exclude_run=None):
     """Renumber a placements payload so nothing collides. Returns {old_id: new_id}.
 
     Rewrites EDGE TARGETS TOO. A chunk's `derives-from` names its Conversation by ID, so
@@ -160,8 +175,23 @@ def allocate(data, hub_root, width=4):
     exactly the dangling-provenance failure this module exists to prevent -- and
     `check_references.py` would then report a broken edge for a mesh that is internally
     consistent apart from this rewrite.
+
+    PASS `exclude_run` WHENEVER THE RUN IS ALREADY PERSISTED. Allocation is not once-only: the
+    documented path is stage 3 allocate -> stage 4 `run_state.py init` -> stage 5, where a
+    failed `check_write_safe.py` says to "re-run allocate_ids.py --apply". By then init has
+    copied this run's IDs into `runs/<id>/placements.json`, so without the exclusion the run
+    reads ITS OWN claims back as a competitor's and renumbers above itself -- in an EMPTY mesh,
+    with no second run anywhere, `k-0001` becomes `k-0003`. The trigger is the run being
+    PERSISTED, not any one call site: every re-allocation after init needs the flag.
+
+    Self-inflation is not silent data loss (edges are rewritten together, so the payload stays
+    internally consistent) and it does not compound: the second re-run is a no-op, because the
+    inflated IDs now sit above the stale ones. What it does produce is DRIFT -- `init` copies
+    rather than syncing, so the working file and `runs/<id>/placements.json` end up holding
+    different IDs for the same chunks, and the run a human resumes by ID is no longer the one
+    on disk. It also burns numbers the mesh never used.
     """
-    counters = next_numbers(hub_root)
+    counters = next_numbers(hub_root, exclude_run)
     mapping = {}
 
     for c in data.get("chunks", []):
@@ -203,6 +233,20 @@ def allocate(data, hub_root, width=4):
 def main():
     argv = sys.argv[1:]
     apply = "--apply" in argv
+
+    # `--run <id>` names the run this placements file IS, so its own persisted claims are not
+    # mistaken for a competitor's. Unknown ids are rejected rather than ignored: a typo'd or
+    # stale run id would silently excuse nothing and reintroduce the self-collision, which is
+    # precisely the fail-open shape this module was written to stop.
+    exclude_run = None
+    if "--run" in argv:
+        i = argv.index("--run")
+        if i + 1 >= len(argv) or argv[i + 1].startswith("--"):
+            print("error: --run needs a run id", file=sys.stderr)
+            return 2
+        exclude_run = argv[i + 1]
+        argv = argv[:i] + argv[i + 2:]
+
     args = [a for a in argv if not a.startswith("--")]
 
     if not args:
@@ -214,6 +258,15 @@ def main():
         print(f"error: not a directory: {hub_root}", file=sys.stderr)
         return 2
     staging_config.configure(hub_root)
+
+    if exclude_run is not None:
+        run_dir = os.path.join(hub_root, staging_config.runs_dir(), exclude_run)
+        if not os.path.isdir(run_dir):
+            print(f"error: no run `{exclude_run}` at {run_dir}", file=sys.stderr)
+            print("--run must name the run this placements file belongs to. A wrong id "
+                  "excuses\nnothing and the run would renumber above itself.",
+                  file=sys.stderr)
+            return 2
 
     # A run whose placements cannot be read has claimed IDs nobody can enumerate. Allocating
     # around it is guesswork, and the failure mode is the silent overwrite this exists to
@@ -228,7 +281,7 @@ def main():
         return 1
 
     if len(args) == 1:
-        counters = next_numbers(hub_root)
+        counters = next_numbers(hub_root, exclude_run)
         if not counters:
             print("No IDs in use. A first run starts at 0001.")
             return 0
@@ -248,7 +301,7 @@ def main():
         print(f"error: {placements} is not valid JSON: {exc}", file=sys.stderr)
         return 2
 
-    mapping = allocate(data, hub_root)
+    mapping = allocate(data, hub_root, exclude_run=exclude_run)
 
     if not apply:
         if not mapping:
