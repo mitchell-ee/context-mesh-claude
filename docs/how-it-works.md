@@ -251,6 +251,25 @@ For collections, the same rule applies to members but not to folders: **promotio
 file, and never creates the collection folder itself.** A collection row pointing at a folder
 that does not exist is an error you fix, not something the tooling papers over.
 
+### One thing to know about numbered collections
+
+**If two people promote into the same `NNN-{slug}.md` collection at once, they can both create
+`004`.** The number comes from reading the folder, and each person's branch shows only what was
+there before either of them started — so both drafts look correct, and **the two PRs merge
+cleanly**, because git sees two different filenames rather than a conflict. You end up with two
+members claiming the same ordinal.
+
+**Nothing is lost when this happens.** Both files exist, both keep their content, and nothing
+references a member by its number — so it is a naming defect, not data loss. But it is quiet:
+no tool complains, and an ordinal is not something people re-read.
+
+**Only `NNN-{slug}.md` collections are affected.** `{slug}.md` and `{date}-{slug}.md` take no
+part of the name from what is already on disk.
+
+**If this matters to your team, catch it in CI** — a check that fails a PR when it adds a member
+whose ordinal already exists on the base branch. That is the right place for it: no amount of
+checking while the file is being drafted can see another person's unmerged branch.
+
 ## Where to go next
 
 | You want to… | Read |

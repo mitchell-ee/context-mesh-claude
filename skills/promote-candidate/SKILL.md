@@ -172,7 +172,11 @@ For each batch:
    - `{slug}` — kebab-case, from the claim's subject. Keep it short and specific.
    - `{date}` — today, `YYYY-MM-DD`.
    - `NNN` — **read the directory and take the next unused number**, zero-padded to match its
-     siblings. If the folder is empty, start at `001`.
+     siblings. If the folder is empty, start at `001`. **This sees only the base branch**, so
+     two people promoting into the same collection at once can both produce `004` — and the
+     two PRs merge cleanly, because git sees different filenames rather than a conflict. It is
+     a naming defect, not data loss: nothing is overwritten, and nothing references a member by
+     its number. **If it matters, catch it in CI**, which is the only place that can see both.
 3. **Draft the member.** Pattern it on sibling members in the same folder — same frontmatter
    keys, same heading shape. If there are none, use the plainest shape that fits the
    collection's *About* text, and **say that you had no sibling to follow**.
