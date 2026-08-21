@@ -233,6 +233,18 @@ def runs_rel():
     return f"{STAGING_DIR}/{RUNS_DIR}/"
 
 
+def transcripts_rel():
+    """The staging-relative transcripts path as an index would write it, trailing slash.
+
+    Exists even though setup never CREATES this directory. Listing and creating are separate
+    questions: the index's Staging table is backticked prose describing what the staging tree
+    holds, not a routing input, so naming an on-demand directory advertises nothing. Omitting
+    it implied `transcripts/` was routable in a way the other three are not, which is backwards
+    -- promotion refuses every staging path alike.
+    """
+    return f"{STAGING_DIR}/{TRANSCRIPTS_DIR}/"
+
+
 # ---------------------------------------------------------------------------
 # Archival policy: does a source system hold the original, or must the Hub?
 # ---------------------------------------------------------------------------

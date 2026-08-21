@@ -169,6 +169,43 @@ a missing one is a transcript that no longer exists anywhere. Those errors are n
 **Archiving is what lets a resumed run still re-propose a chunk** (stage 4a). That is a
 consequence, not the justification: the reason to keep a copy is that nothing else will.
 
+**Move the input; do not leave a second copy behind.** Archiving material that arrived through
+the inbox otherwise leaves the same bytes in two places — `inbox/<original-name>.md` and
+`<staging>/transcripts/<conv-id>.md` — and a file defined as *the transcript as received* has
+no business existing twice. The inbox also stops being a queue: nothing distinguishes what is
+waiting from what is done.
+
+**Order matters, and it is not symmetric.** Write and verify the archive *before* removing the
+input, so a failure at any step leaves the transcript existing somewhere:
+
+1. **Archive, then verify, then remove.** In a git Hub, `git mv <inbox-path>
+   <staging>/transcripts/<conv-id>.md` does both halves atomically and records a rename, which
+   keeps the history and makes the diff readable.
+2. **Verify against `content_hash`, not against existence.** `shasum -a 256 <archive-path>`
+   must equal the `content_hash` on the `Conversation` node. That is what proves the archive is
+   the thing that was actually ingested, and it is why `content_hash` exists — a file being
+   present says nothing about whether it is the right file.
+3. **`source_ref` and `source_archive` answer different questions and must never hold the same
+   value.** `source_ref` is *how it arrived* (`inbox drop: 2026-07-07-standup.md`) and is
+   historical — it stops resolving after the move, which is correct. `source_archive` is *where
+   it lives now*, and is the only path anything should read from.
+
+**A secondary reference does not make it `referenced`.** A transcript exported from Granola may
+carry the note URL in its header; that belongs in the `Conversation` node body, marked
+secondary. What was read at ingestion was the **file**, and the archived file stays the source
+of record — a note upstream can be edited or deleted independently of the export. `referenced`
+means a datastore holds the original, and a path is not a datastore.
+
+**If the inbox carries a manifest, update it rather than deleting rows.** A README noting
+coverage gaps, a truncated file, or a systematic transcription error holds collection-level
+context that must survive files leaving one at a time. A status column (`Ingested → <archive
+path>`) keeps the queue legible.
+
+**A Hub scaffolded before 0.19.0 may not list `runs/` or `transcripts/` in its index's staging
+table.** Setup lists all four now; older indexes were written before those directories existed.
+Add the rows by hand — the table is descriptive prose, so a missing row breaks nothing, but it
+leaves a directory in the tree that the index never explains.
+
 Say plainly at the checkpoint and in the commit summary that an archive was written, and that
 it is the transcript **as received**. Retention period, access control, and deletion path are
 the team's call — this skill does not invent them, and a team that does not want transcripts
@@ -560,6 +597,19 @@ hand.
 that arrived through the inbox has nothing behind it, so the Hub keeps its own copy under
 `<staging>/transcripts/` — unless the team declared `archive_inbox: trusted` in `.context-mesh`,
 meaning their source system holds originals.
+
+**`show` resolves this through the run's `Conversation` node, not by looking for one file.**
+It reports five states, and they are not interchangeable:
+
+| What it prints | What it means |
+|---|---|
+| `transcript kept` | The per-run working copy is there. |
+| `transcript archived` | No working copy, but `source_archive` resolves — **retry works**. |
+| `source is external` | `referenced`; the source is in Granola/Slack. Retry *may* work, and nothing here can verify it. |
+| `ARCHIVE MISSING` | `source_kind` is `archived` but the file is not on disk. A **broken** archive, not an absent one. |
+| `no transcript kept` | Genuinely nothing to go back to. |
+
+Each on-disk case names the path, so a reviewer can see which copy backs the claim.
 
 `run_state.py show` says which case a run is in. **Say it before offering retry**, not after
 they have chosen it.

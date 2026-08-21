@@ -59,6 +59,61 @@ def _run_dir(hub_root, run_id):
     return os.path.join(hub_root, staging_config.runs_dir(), run_id)
 
 
+def _conversation(data):
+    """The run's Conversation node -- where source_kind and source_archive live."""
+    return next((c for c in data.get("chunks", [])
+                 if c.get("type") == "Conversation"), None)
+
+
+def transcript_source(hub_root, run_id, data):
+    """Where this run's source can be read: ("working"|"archive"|"external"|None, detail).
+
+    RESOLVED THROUGH THE CONVERSATION NODE, not from one filesystem test. The per-run working
+    copy at `runs/<id>/transcript.md` is only ONE of the places the source legitimately lives,
+    and `archive_transcript()` is the only thing that writes it. A Hub that keeps exactly one
+    copy per transcript -- the archive, with no per-run duplicate -- has a perfectly retryable
+    run that the old check called unretryable, because it asked "is there a working copy beside
+    this run?" while printing an answer to "can this placement still be corrected?"
+
+    `source_archive` is already authoritative everywhere else in this pipeline:
+    `validate_placements.py` REQUIRES it when `source_kind` is `archived` (and forbids it when
+    `referenced`), and `render_checkpoint.py` reads it to tell the reviewer where the
+    transcript went. run_state.py was the only script not consulting it -- and the only one
+    gating what the reviewer believes they can still do.
+
+    Fail-CLOSED in the direction that costs work: reporting "no transcript" when there is one
+    means a reviewer skips a correction they could have made, or hand-edits a candidate
+    believing there is no alternative.
+
+    `referenced` is a THIRD state, never merged into the on-disk cases. Its source is in
+    Granola/Slack/wherever -- this code cannot verify it exists, and claiming retry works when
+    the note may have been deleted is a guess dressed as a fact.
+    """
+    working = os.path.join(_run_dir(hub_root, run_id), TRANSCRIPT)
+    if os.path.isfile(working):
+        return ("working", working)
+
+    conv = _conversation(data)
+    if not conv:
+        return (None, None)
+
+    kind = conv.get("source_kind")
+    if kind == "archived":
+        rel = conv.get("source_archive") or ""
+        if rel:
+            archived = os.path.join(hub_root, rel)
+            if os.path.isfile(archived):
+                return ("archive", rel)
+        # Archived, but the file is not where the node says. That is a BROKEN archive, not an
+        # absent one, and the distinction matters: the transcript was supposed to be kept.
+        return ("missing-archive", rel or "(no source_archive recorded)")
+
+    if kind == "referenced":
+        return ("external", conv.get("source_ref") or "(no source_ref recorded)")
+
+    return (None, None)
+
+
 def _load(hub_root, run_id):
     """The run's placements, or exit non-zero saying which run is missing.
 
@@ -246,9 +301,19 @@ def show(hub_root, run_id):
         by[decision_of(c)].append(c)
 
     print(f"run {run_id}   started {data.get('started_at', '?')}")
-    transcript = os.path.join(_run_dir(hub_root, run_id), TRANSCRIPT)
-    if os.path.isfile(transcript):
-        print(f"transcript kept -- correcting a placement still works")
+    # The path is NAMED, not just asserted: a reviewer deciding whether to retry should be able
+    # to see which copy backs the claim and go read it.
+    where, detail = transcript_source(hub_root, run_id, data)
+    if where == "working":
+        print("transcript kept -- correcting a placement still works "
+              f"({os.path.relpath(detail, hub_root)})")
+    elif where == "archive":
+        print(f"transcript archived -- correcting a placement still works ({detail})")
+    elif where == "external":
+        print(f"source is external -- retry may work, if it is still there ({detail})")
+    elif where == "missing-archive":
+        print(f"ARCHIVE MISSING -- source_kind is 'archived' but {detail} is not on disk. "
+              "Correcting a placement will not work until that file is restored.")
     else:
         print("no transcript kept -- approve and drop work; correcting one does not")
     print()

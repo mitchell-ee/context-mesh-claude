@@ -77,12 +77,6 @@ and IDs only, so an agent can reference `<domain>:OPP-NNNN` without loading the 
 If it doesn't: say **"None."** explicitly. An absent section is ambiguous; an explicit "this
 team does not run discovery" tells routing there are no IDs to reference here.>
 
-## Staging
-
-| Location | Purpose |
-|---|---|
-| `staging/candidates/` | Proposed nodes and edges awaiting the human gate. Nothing here is canonical. |
-
 ## Not in this mesh
 
 Optional but valuable: what is **deliberately** absent. A chunk whose only home would be one

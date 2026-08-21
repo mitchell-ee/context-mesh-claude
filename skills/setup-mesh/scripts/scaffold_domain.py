@@ -63,15 +63,27 @@ VOCABULARY = "v2.5"
 # survey once hardcoded its own copy and promised a directory this script would not create
 # (Minotaur finding 5).
 #
-# THE ROOT ALSO GETS `inbox/` AND `runs/`, because the ROOT index template lists both. A row
-# naming a directory that setup does not create is precisely the Minotaur-5 failure above, in
-# the same file -- `a missing directory is an error` (file-taxonomy.md), so an advertised inbox
-# must exist. Whenever a row is added to a template, add its directory here.
+# THE ROOT ALSO GETS `inbox/` AND `runs/`, because ROOT_INDEX below lists both. A row naming a
+# directory that setup does not create is precisely the Minotaur-5 failure above, in the same
+# file -- `a missing directory is an error` (file-taxonomy.md), so an advertised inbox must
+# exist. Whenever a row is added to ROOT_INDEX, add its directory here.
 #
-# `transcripts/` is NOT here and is not advertised: it is created on demand, the first time a
-# transcript is actually archived. A Hub whose source system holds originals (`archive_inbox:
-# trusted`) never writes one, and scaffolding an empty `transcripts/` into such a mesh would
-# advertise a retention posture the team explicitly declined.
+# NOT `templates/context-index.md` -- that is the DOMAIN template, and a domain has neither a
+# staging tree nor an index of its own (v0.17.0). Pointing this rule at the wrong file is how
+# Minotaur-5 happened; the root index is the string in this file, nowhere else.
+#
+# `transcripts/` is NOT here: it is created on demand, the first time a transcript is actually
+# archived. A Hub whose source system holds originals (`archive_inbox: trusted`) never writes
+# one, and scaffolding an empty `transcripts/` into such a mesh would advertise a retention
+# posture the team explicitly declined.
+#
+# THAT IS A RULE ABOUT CREATING, NOT ABOUT LISTING, and the two were conflated. ROOT_INDEX
+# lists `transcripts/` anyway, describing it as on-demand: all four staging locations are
+# equally unroutable (promotion refuses ANY staging target -- "output, not canonical context",
+# classify_candidates.py), so listing three of them implies a distinction that does not exist.
+# The table is backticked prose for a human reading the index, never a routing input, so a row
+# for a directory that may not exist yet advertises nothing -- it explains what the directory
+# would be for if the team ever archives.
 ROOT_DIRS = [staging_config.candidates_dir(), staging_config.inbox_dir(),
              staging_config.runs_dir()]
 
@@ -180,6 +192,7 @@ Read it first; load only what the current task needs. Do not load the whole mesh
 | `{candidates}` | Cross-cutting proposals from ingestion, awaiting the human gate. Nothing here is canonical. |
 | `{inbox}` | Optional drop location for raw material awaiting processing. |
 | `{runs}` | One directory per ingestion run, holding its proposed placements and the decision recorded for each. A run with pending chunks is a review someone can still come back to. |
+| `{transcripts}` | Created **on demand** — archived transcripts, kept only when nothing else will hold the original. A mesh whose source systems keep their own may never have this directory. |
 
 <!-- The staging tree may live somewhere other than `staging/`. It is set in ONE place --
      the `{env_var}` environment variable -- and the whole tree moves together,
@@ -287,6 +300,7 @@ def scaffold(path, name, is_root, dry_run=False, archive=None):
                                      candidates=staging_config.candidates_rel(),
                                      inbox=staging_config.inbox_rel(),
                                      runs=staging_config.runs_rel(),
+                                     transcripts=staging_config.transcripts_rel(),
                                      env_var=staging_config.ENV_VAR)
             with open(index_path, "w") as fh:
                 fh.write(body)
